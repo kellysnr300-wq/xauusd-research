@@ -3,7 +3,10 @@
 import numpy as np
 import pandas as pd
 
-SIGNAL_COLUMNS = ("signal", "stop_distance", "target_distance")
+SIGNAL_COLUMNS = (
+    "signal", "stop_distance", "target_distance",
+    "entry", "stop_price", "target_r",
+)
 
 
 def validate_signals(signals, n_rows: int) -> list[str]:
@@ -18,12 +21,26 @@ def validate_signals(signals, n_rows: int) -> list[str]:
             "(need exactly one row per candle)."
         )
 
-    if "signal" not in signals.columns:
-        problems.append("Output has no 'signal' column.")
-    else:
+    if "entry" in signals.columns:
+        values = pd.to_numeric(signals["entry"], errors="coerce").fillna(0)
+        if not values.isin([-1, 0, 1]).all():
+            problems.append("'entry' must contain only -1, 0 or 1.")
+
+        for column in ("stop_price", "target_r"):
+            if column not in signals.columns:
+                problems.append(f"Event output needs a '{column}' column.")
+            else:
+                needed = pd.to_numeric(
+                    signals[column], errors="coerce")[values != 0]
+                if needed.isna().any():
+                    problems.append(
+                        f"'{column}' is missing on some entry rows.")
+    elif "signal" in signals.columns:
         values = pd.to_numeric(signals["signal"], errors="coerce")
         if not values.fillna(0).isin([-1, 0, 1]).all():
             problems.append("'signal' must contain only -1, 0 or 1.")
+    else:
+        problems.append("Output needs a 'signal' or an 'entry' column.")
 
     return problems
 

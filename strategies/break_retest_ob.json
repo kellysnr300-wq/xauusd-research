@@ -1,0 +1,18 @@
+{
+  "id": "break_retest_ob",
+  "name": "Break & Retest Origin OB",
+  "type": "Breakout",
+  "description": "Simple version: close beyond the latest swing high/low (BOS), then enter on the retest of the order block that started the move. Stop beyond the OB, target 3R. Placeholder for the refined version.",
+  "params": {
+    "swing": 3,
+    "ob_lookback": 5,
+    "buffer": 0.3,
+    "min_risk": 1.0,
+    "max_risk": 25.0,
+    "target_r": 3.0,
+    "max_wait": 100
+  },
+  "status": "saved",
+  "created": "2026-10-03T00:00:00",
+  "updated": "2026-10-03T00:00:00"
+}

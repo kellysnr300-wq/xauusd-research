@@ -30,6 +30,10 @@ class MyStrategy(Strategy):
         #
         # Optional columns: stop_distance, target_distance (price units
         # from entry).
+        #
+        # Bracket-order alternative: return "entry" (1/-1/0) with
+        # "stop_price" and "target_r" columns instead of "signal".
+        # See strategies/break_retest_ob.py for a full example.
         average = data["close"].rolling(self.length).mean()
 
         signals = pd.DataFrame(index=data.index)
