@@ -1,0 +1,6 @@
+# Core scientific stack is provided by Termux packages:
+# python-numpy
+# python-pandas
+# python-scipy
+
+# Additional pure-Python dependencies will be added here if needed.

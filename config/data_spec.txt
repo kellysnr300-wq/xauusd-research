@@ -1,0 +1,22 @@
+Instrument: XAU/USD
+Timeframe: 5-minute
+Historical development period: 2016-01-01 through 2025-12-31
+Final untouched out-of-sample period: 2026-01-01 onward
+Required columns:
+- timestamp
+- open
+- high
+- low
+- close
+
+Optional:
+- volume
+
+Requirements:
+- Preserve raw downloaded data unchanged
+- Store processed data separately
+- Timestamps must be unambiguous
+- Data must be sorted chronologically
+- No duplicate timestamps
+- No look-ahead information
+- Document the source and timezone

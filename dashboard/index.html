@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XAU/USD Research Lab</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header class="topbar">
+    <div class="brand">
+        <div class="brand-mark">X</div>
+        <div>
+            <strong>XAU/USD Research</strong>
+            <span>Quantitative research laboratory</span>
+        </div>
+    </div>
+
+    <div class="research-status">
+        <span class="status-dot"></span>
+        Research mode
+    </div>
+</header>
+
+
+<div class="app">
+
+    <aside class="sidebar">
+
+        <div class="workspace-label">WORKSPACE</div>
+
+        <button class="nav-item active" data-tab="overview">
+            <span>Overview</span>
+        </button>
+
+        <button class="nav-item" data-tab="strategies">
+            <span>Strategies</span>
+        </button>
+
+        <button class="nav-item" data-tab="pnl">
+            <span>P&L</span>
+        </button>
+
+        <div class="sidebar-bottom">
+            <div class="data-status">
+                <span class="status-dot"></span>
+                <div>
+                    <strong>Pipeline</strong>
+                    <small>Development</small>
+                </div>
+            </div>
+        </div>
+
+    </aside>
+
+
+    <main class="main">
+
+
+        <!-- OVERVIEW -->
+
+        <section id="overview" class="tab active">
+
+            <div class="page-head">
+
+                <div>
+                    <span class="eyebrow">RESEARCH DASHBOARD</span>
+                    <h1>Overview</h1>
+                    <p>Monitor research results without mixing strategy assumptions into the engine.</p>
+                </div>
+
+                <div class="selector-wrap">
+                    <label>Strategy</label>
+                    <select class="strategy-selector">
+                        <option>All strategies</option>
+                        <option>Breakout → Retest</option>
+                        <option>Momentum</option>
+                        <option>Mean Reversion</option>
+                    </select>
+                </div>
+
+            </div>
+
+
+            <div class="hero-card">
+
+                <div>
+                    <span class="eyebrow">INSTRUMENT</span>
+                    <h2>XAU/USD</h2>
+                    <p>Gold / US Dollar · 5-minute research timeframe</p>
+                </div>
+
+                <div class="hero-meta">
+                    <div>
+                        <span>Research period</span>
+                        <strong>2016–2025</strong>
+                    </div>
+
+                    <div>
+                        <span>OOS period</span>
+                        <strong>2026+</strong>
+                    </div>
+                </div>
+
+            </div>
+
+
+            <div class="kpi-grid">
+
+                <div class="kpi-card">
+                    <span>Trades</span>
+                    <strong>—</strong>
+                    <small>No experiments yet</small>
+                </div>
+
+                <div class="kpi-card">
+                    <span>Win rate</span>
+                    <strong>—</strong>
+                    <small>Awaiting backtest</small>
+                </div>
+
+                <div class="kpi-card">
+                    <span>Loss rate</span>
+                    <strong>—</strong>
+                    <small>Awaiting backtest</small>
+                </div>
+
+                <div class="kpi-card">
+                    <span>Avg R:R</span>
+                    <strong>—</strong>
+                    <small>Not calculated</small>
+                </div>
+
+                <div class="kpi-card">
+                    <span>Net P&L</span>
+                    <strong>—</strong>
+                    <small>No live research result</small>
+                </div>
+
+                <div class="kpi-card">
+                    <span>Max drawdown</span>
+                    <strong>—</strong>
+                    <small>Not calculated</small>
+                </div>
+
+            </div>
+
+
+            <div class="two-column">
+
+                <div class="panel chart-panel">
+
+                    <div class="panel-head">
+                        <div>
+                            <span class="eyebrow">PERFORMANCE</span>
+                            <h3>Equity curve</h3>
+                        </div>
+
+                        <span class="tag">No data</span>
+                    </div>
+
+                    <div class="empty-chart">
+
+                        <div class="chart-grid"></div>
+
+                        <div class="chart-message">
+                            <strong>Equity curve will appear here</strong>
+                            <span>Run a backtest to populate research results.</span>
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="panel">
+
+                    <div class="panel-head">
+                        <div>
+                            <span class="eyebrow">RESEARCH</span>
+                            <h3>Current state</h3>
+                        </div>
+                    </div>
+
+                    <div class="research-list">
+
+                        <div class="research-row">
+                            <span>Historical dataset</span>
+                            <strong class="pending">Pending</strong>
+                        </div>
+
+                        <div class="research-row">
+                            <span>Validation engine</span>
+                            <strong class="ready">Ready</strong>
+                        </div>
+
+                        <div class="research-row">
+                            <span>Backtesting engine</span>
+                            <strong class="ready">Ready</strong>
+                        </div>
+
+                        <div class="research-row">
+                            <span>Strategy experiments</span>
+                            <strong class="pending">Pending</strong>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="panel research-principles">
+
+                <div class="panel-head">
+                    <div>
+                        <span class="eyebrow">RESEARCH NOTES</span>
+                        <h3>Principles</h3>
+                    </div>
+                </div>
+
+                <div class="principle-grid">
+
+                    <div>
+                        <span>01</span>
+                        <strong>Reproducible</strong>
+                        <p>Every experiment should be repeatable from its dataset, parameters and code.</p>
+                    </div>
+
+                    <div>
+                        <span>02</span>
+                        <strong>No look-ahead</strong>
+                        <p>Signals must only use information available at the time of the decision.</p>
+                    </div>
+
+                    <div>
+                        <span>03</span>
+                        <strong>Out-of-sample</strong>
+                        <p>The final validation period remains untouched during strategy development.</p>
+                    </div>
+
+                    <div>
+                        <span>04</span>
+                        <strong>Evidence first</strong>
+                        <p>Patterns are hypotheses until they survive statistical and robustness testing.</p>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- STRATEGIES -->
+
+        <section id="strategies" class="tab">
+
+            <div class="page-head">
+
+                <div>
+                    <span class="eyebrow">RESEARCH WORKSPACE</span>
+                    <h1>Strategies</h1>
+                    <p>Create, document and manage quantitative research hypotheses.</p>
+                </div>
+
+                <button class="primary-button" id="newStrategy">
+                    + New strategy
+                </button>
+
+            </div>
+
+
+            <div id="strategy-list" class="strategy-grid">
+
+                <div class="strategy-card">
+
+                    <div class="strategy-card-top">
+                        <span class="strategy-type">BREAKOUT</span>
+                        <span class="tag draft">Draft</span>
+                    </div>
+
+                    <h3>Breakout → Retest</h3>
+
+                    <p>
+                        Test whether a structural breakout followed by a retest
+                        produces measurable continuation behaviour.
+                    </p>
+
+                    <div class="strategy-footer">
+                        <span>0 experiments</span>
+                        <button class="text-button">Open</button>
+                    </div>
+
+                </div>
+
+
+                <div class="strategy-card">
+
+                    <div class="strategy-card-top">
+                        <span class="strategy-type">MOMENTUM</span>
+                        <span class="tag draft">Planned</span>
+                    </div>
+
+                    <h3>Momentum Baseline</h3>
+
+                    <p>
+                        Establish a simple momentum benchmark before testing
+                        more complex hypotheses.
+                    </p>
+
+                    <div class="strategy-footer">
+                        <span>0 experiments</span>
+                        <button class="text-button">Open</button>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div id="strategy-editor" class="editor-panel hidden">
+
+                <div class="editor-head">
+
+                    <div>
+                        <span class="eyebrow">STRATEGY EDITOR</span>
+                        <h2>Create strategy</h2>
+                    </div>
+
+                    <button class="close-button" id="closeEditor">×</button>
+
+                </div>
+
+
+                <div class="form-grid">
+
+                    <div class="form-field">
+                        <label>Strategy name</label>
+                        <input id="strategyName" type="text" placeholder="e.g. Breakout Retest v1">
+                    </div>
+
+                    <div class="form-field">
+                        <label>Strategy type</label>
+                        <select>
+                            <option>Breakout</option>
+                            <option>Momentum</option>
+                            <option>Mean Reversion</option>
+                            <option>Trend</option>
+                            <option>Volatility</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
+
+                </div>
+
+
+                <div class="form-field">
+                    <label>Description</label>
+                    <textarea id="strategyDescription" rows="4"
+                        placeholder="Describe the research hypothesis..."></textarea>
+                </div>
+
+
+                <div class="form-field">
+
+                    <div class="code-label">
+                        <label>Strategy code</label>
+                        <span>Python</span>
+                    </div>
+
+                    <textarea class="code-editor" id="strategyCode"
+                        spellcheck="false">class MyStrategy:
+    def generate_signals(self, data):
+        # Define research logic here
+        signals = data.copy()
+
+        return signals</textarea>
+
+                </div>
+
+
+                <div class="editor-actions">
+
+                    <button class="secondary-button" id="saveDraft">
+                        Save draft
+                    </button>
+
+                    <button class="primary-button" id="saveStrategy">
+                        Save strategy
+                    </button>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- P&L -->
+
+        <section id="pnl" class="tab">
+
+            <div class="page-head">
+
+                <div>
+                    <span class="eyebrow">PERFORMANCE</span>
+                    <h1>P&L</h1>
+                    <p>Performance analysis for the selected research strategy.</p>
+                </div>
+
+                <div class="selector-wrap">
+                    <label>Strategy</label>
+                    <select class="strategy-selector">
+                        <option>All strategies</option>
+                        <option>Breakout → Retest</option>
+                        <option>Momentum</option>
+                        <option>Mean Reversion</option>
+                    </select>
+                </div>
+
+            </div>
+
+
+            <div class="kpi-grid pnl-kpis">
+
+                <div class="kpi-card">
+                    <span>Net P&L</span>
+                    <strong>—</strong>
+                    <small>No backtest data</small>
+                </div>
+
+                <div class="kpi-card">
+                    <span>Profit factor</span>
+                    <strong>—</strong>
+                    <small>Not calculated</small>
+                </div>
+
+                <div class="kpi-card">
+                    <span>Average trade</span>
+                    <strong>—</strong>
+                    <small>Not calculated</small>
+                </div>
+
+                <div class="kpi-card">
+                    <span>Avg R:R</span>
+                    <strong>—</strong>
+                    <small>Not calculated</small>
+                </div>
+
+            </div>
+
+
+            <div class="panel chart-panel">
+
+                <div class="panel-head">
+
+                    <div>
+                        <span class="eyebrow">EQUITY</span>
+                        <h3>Portfolio equity</h3>
+                    </div>
+
+                    <span class="tag">Awaiting data</span>
+
+                </div>
+
+                <div class="large-empty-chart">
+
+                    <div>
+                        <strong>No performance data</strong>
+                        <span>Backtest results will populate this chart.</span>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="two-column">
+
+                <div class="panel">
+
+                    <div class="panel-head">
+                        <div>
+                            <span class="eyebrow">RISK</span>
+                            <h3>Drawdown</h3>
+                        </div>
+                    </div>
+
+                    <div class="risk-empty">
+                        <strong>—</strong>
+                        <span>Maximum drawdown</span>
+                    </div>
+
+                </div>
+
+
+                <div class="panel">
+
+                    <div class="panel-head">
+                        <div>
+                            <span class="eyebrow">TRADES</span>
+                            <h3>Win / loss</h3>
+                        </div>
+                    </div>
+
+                    <div class="risk-empty">
+                        <strong>—</strong>
+                        <span>Trade distribution</span>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
