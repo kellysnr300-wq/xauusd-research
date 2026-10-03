@@ -28,12 +28,13 @@ class MyStrategy(Strategy):
         # Use only current and past candles. No shift(-1), and no
         # statistics of the whole dataset: the look-ahead check rejects those.
         #
-        # Optional columns: stop_distance, target_distance (price units
-        # from entry).
+        # Optional exit columns: stop_distance, stop_pct, stop_atr,
+        # stop_price, target_distance, target_pct, target_atr,
+        # target_price, target_r (reward:risk).
         #
-        # Bracket-order alternative: return "entry" (1/-1/0) with
-        # "stop_price" and "target_r" columns instead of "signal".
-        # See strategies/break_retest_ob.py for a full example.
+        # Bracket-order alternative: return "entry" (1/-1/0) instead of
+        # "signal", with a stop and a target on every entry row.
+        # Details: docs/STRATEGY_FORMAT.md
         average = data["close"].rolling(self.length).mean()
 
         signals = pd.DataFrame(index=data.index)
@@ -330,9 +331,11 @@ $("checkStrategy").addEventListener("click", async () => {
     try {
         const result = await api(`/strategies/${saved.id}/check`, "POST", {});
         if (result.ok) {
+            const notes = result.info.notes || [];
             showCheck(true,
                 "Check passed: output is valid and uses no future data " +
-                `(${result.info.synthetic_trades} trades on synthetic data).`);
+                `(${result.info.synthetic_trades} trades on synthetic data).` +
+                (notes.length ? "\nNotes:\n- " + notes.join("\n- ") : ""));
         } else {
             showCheck(false, result.problems.join("\n"));
         }
@@ -393,10 +396,11 @@ function pollRun(runId) {
 
             if (stage === "done") {
                 clearInterval(pollTimer);
-                $("runButton").disabled = false;
-                setRunStatus("Done", "ok");
+                setRunStatus("Loading results…", "busy");
                 await loadStrategies();
                 await loadHistory(false, runId);
+                $("runButton").disabled = false;
+                setRunStatus("Done", "ok");
                 return;
             }
 
@@ -477,9 +481,28 @@ async function showRun(runId) {
 
 /* ---------- rendering results ---------- */
 
+function renderNotes(s) {
+    const box = $("runNotes");
+    const notes = s ? [...(s.normalizer_warnings || [])] : [];
+
+    if (s && s.skipped_entries) {
+        notes.push(
+            `${s.skipped_entries} entry attempts skipped ` +
+            "(stop/target on the wrong side of the fill price).");
+    }
+
+    if (notes.length) {
+        box.textContent = "Notes:\n- " + notes.join("\n- ");
+        box.className = "check-result warn";
+    } else {
+        box.className = "check-result hidden";
+    }
+}
+
 function renderRun(detail) {
     currentDetail = detail;
     const s = detail && detail.summary;
+    renderNotes(s);
 
     if (!s) {
         ["kpiNet", "kpiPF", "kpiAvg", "kpiRR", "ddValue", "wlValue"]

@@ -16,6 +16,7 @@ import pandas as pd
 from src import registry
 from src.backtester import Backtester
 from src.lookahead import check_no_lookahead
+from src.normalize import normalize_output
 
 
 def synthetic_data(n: int = 3000) -> pd.DataFrame:
@@ -53,7 +54,10 @@ def run_check(strategy_id: str, params: dict) -> dict:
         if not problems:
             backtester = Backtester(data, factory())
             trades = backtester.simulate()
-            result["info"] = {"synthetic_trades": len(trades)}
+            result["info"] = {
+                "synthetic_trades": len(trades),
+                "notes": backtester.warnings,
+            }
             result["ok"] = True
 
     except Exception as error:

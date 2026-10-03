@@ -3,99 +3,64 @@
 import numpy as np
 import pandas as pd
 
-SIGNAL_COLUMNS = (
-    "signal", "stop_distance", "target_distance",
-    "entry", "stop_price", "target_r",
+from src.normalize import (
+    CANONICAL_COLUMNS,
+    StrategyOutputError,
+    normalize_output,
 )
 
 
-def validate_signals(signals, n_rows: int) -> list[str]:
-    if not isinstance(signals, pd.DataFrame):
-        return ["generate_signals must return a pandas DataFrame."]
-
-    problems = []
-
-    if len(signals) != n_rows:
-        problems.append(
-            f"Returned {len(signals)} rows for {n_rows} candles "
-            "(need exactly one row per candle)."
-        )
-
-    if "entry" in signals.columns:
-        values = pd.to_numeric(signals["entry"], errors="coerce").fillna(0)
-        if not values.isin([-1, 0, 1]).all():
-            problems.append("'entry' must contain only -1, 0 or 1.")
-
-        for column in ("stop_price", "target_r"):
-            if column not in signals.columns:
-                problems.append(f"Event output needs a '{column}' column.")
-            else:
-                needed = pd.to_numeric(
-                    signals[column], errors="coerce")[values != 0]
-                if needed.isna().any():
-                    problems.append(
-                        f"'{column}' is missing on some entry rows.")
-    elif "signal" in signals.columns:
-        values = pd.to_numeric(signals["signal"], errors="coerce")
-        if not values.fillna(0).isin([-1, 0, 1]).all():
-            problems.append("'signal' must contain only -1, 0 or 1.")
-    else:
-        problems.append("Output needs a 'signal' or an 'entry' column.")
-
-    return problems
+def _normalized(factory, data: pd.DataFrame):
+    return normalize_output(factory().generate_signals(data.copy()), data)
 
 
 def check_no_lookahead(factory, data: pd.DataFrame, cuts=(0.35, 0.7, 0.9)):
     """Return a list of problems (empty list = passed).
 
     Runs the strategy on all of `data`, then on truncated copies. If an
-    earlier signal changes when later candles are removed, the strategy
-    is using future information.
+    earlier output changes when later candles are removed, the strategy is
+    using future information. Outputs are compared after normalization.
     """
 
     data = data.reset_index(drop=True)
 
-    full = factory().generate_signals(data.copy())
-    problems = validate_signals(full, len(data))
+    try:
+        full = _normalized(factory, data)
+    except StrategyOutputError as error:
+        return [str(error)]
 
-    if problems:
-        return problems
-
-    columns = [c for c in SIGNAL_COLUMNS if c in full.columns]
+    problems = []
 
     for fraction in cuts:
         k = max(int(len(data) * fraction), 1)
+        short_data = data.iloc[:k].copy()
 
-        part = factory().generate_signals(data.iloc[:k].copy())
+        try:
+            part = _normalized(factory, short_data)
+        except StrategyOutputError as error:
+            return [f"Output is invalid on shorter data: {error}"]
 
-        if not isinstance(part, pd.DataFrame) or len(part) != k:
-            problems.append(
-                "Output length changes when the data is shortened."
-            )
-            break
+        if part.mode != full.mode:
+            return ["Output format changes when the data is shortened."]
 
-        for column in columns:
-            if column not in part.columns:
-                problems.append(
-                    f"Column '{column}' disappears on shorter data."
-                )
+        for column in CANONICAL_COLUMNS:
+            in_full = column in full.frame.columns
+            in_part = column in part.frame.columns
+            if not in_full and not in_part:
                 continue
 
-            a = pd.to_numeric(
-                full[column].iloc[:k], errors="coerce"
-            ).to_numpy(dtype=float)
-            b = pd.to_numeric(part[column], errors="coerce").to_numpy(
-                dtype=float
-            )
+            a = (full.frame[column].iloc[:k].to_numpy(dtype=float)
+                 if in_full else np.full(k, np.nan))
+            b = (part.frame[column].to_numpy(dtype=float)
+                 if in_part else np.full(k, np.nan))
 
-            if not np.allclose(a, b, rtol=1e-9, atol=1e-9, equal_nan=True):
-                same = np.isclose(a, b, rtol=1e-9, atol=1e-9, equal_nan=True)
+            same = np.isclose(a, b, rtol=1e-9, atol=1e-9, equal_nan=True)
+            if not same.all():
                 first = int(np.flatnonzero(~same)[0])
-                problems.append(
+                return [
                     f"LOOK-AHEAD: '{column}' at candle {first} changes when "
                     "later candles are removed. The strategy is using "
                     "future data (e.g. shift(-1), whole-sample statistics)."
-                )
-                return problems
+                ]
 
     return problems

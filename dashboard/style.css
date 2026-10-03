@@ -962,3 +962,9 @@ button {
 .hidden {
     display: none !important;
 }
+
+.check-result.warn {
+    background: var(--amber-soft);
+    border: 1px solid #fde68a;
+    color: var(--amber);
+}

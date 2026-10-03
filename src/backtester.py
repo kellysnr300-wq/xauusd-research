@@ -1,6 +1,7 @@
 import pandas as pd
 
 from src.execution import ExecutionModel
+from src.normalize import normalize_output
 from src.portfolio import Portfolio
 from src.strategies import Strategy
 from src.trades import Position, Trade
@@ -15,9 +16,10 @@ class Backtester:
     the position it wants to hold AFTER that candle closes
     (1 = long, -1 = short, 0 = flat).
 
-    Optional columns "stop_distance" and "target_distance" (price units,
-    measured from the entry price) set a stop-loss / take-profit when a
-    position is opened from that signal row.
+    Optional exit-level columns (see src/normalize.py) are read from the
+    signal row and resolved at the fill price: stop_price, stop_distance,
+    target_price, target_distance, target_r. Strategy output is passed
+    through the normalizer first, so looser formats are accepted.
 
     Execution rules (no look-ahead)
     -------------------------------
@@ -35,12 +37,12 @@ class Backtester:
     -------------------------------------
     If the strategy output has an "entry" column (1 long, -1 short,
     0 none) the engine runs in event mode instead:
-    - "stop_price" (absolute price) and "target_r" (reward:risk multiple)
-      are required on every entry row.
-    - The entry is filled at the next candle's open. Risk is the distance
-      from that open to stop_price; the target is open +/- target_r * risk,
-      so the reward:risk is exact. Entries whose stop is on the wrong side
-      of the open are skipped (counted in skipped_entries).
+    - A stop (stop_price or stop_distance) and a target (target_r,
+      target_distance or target_price) are required on every entry row.
+    - The entry is filled at the next candle's open. With target_r the
+      target is open +/- target_r * risk, so reward:risk is exact.
+      Entries whose stop/target is on the wrong side of the open are
+      skipped (counted in skipped_entries).
     - One position at a time: entry events are ignored while a trade is
       open. Trades end only at the stop, the target, or the end of data.
     - Stop/target fill rules are the same as in the default mode.
@@ -64,18 +66,15 @@ class Backtester:
         self.max_entry_gap = max_entry_gap
         self.trades: list[Trade] = []
         self.skipped_entries = 0
+        self.warnings: list[str] = []
 
     def run(self) -> pd.DataFrame:
         """Run the strategy and return generated signals."""
 
-        signals = self.strategy.generate_signals(self.data)
-
-        if len(signals) != len(self.data):
-            raise ValueError(
-                "Strategy must return one signal row per candle."
-            )
-
-        return signals
+        raw = self.strategy.generate_signals(self.data.copy())
+        normalized = normalize_output(raw, self.data)
+        self.warnings = normalized.warnings
+        return normalized.frame
 
     def record_trade(self, trade: Trade) -> None:
         """Record a completed trade and update portfolio."""
@@ -124,8 +123,7 @@ class Backtester:
             signals["signal"].fillna(0).to_numpy(dtype=float)
         ).clip(-1, 1).round().astype(int)
 
-        stop_dist = self._optional_column(signals, "stop_distance")
-        target_dist = self._optional_column(signals, "target_distance")
+        specs = self._spec_arrays(signals)
 
         position: Position | None = None
         pending = None
@@ -134,7 +132,7 @@ class Backtester:
         for j in range(n):
             # 1. Execute the order generated on the previous candle.
             if pending is not None:
-                target, sd, td = pending
+                target, spec_row = pending
                 pending = None
 
                 current = self._side_value(position)
@@ -147,9 +145,12 @@ class Backtester:
                     if target != 0:
                         gap = ts[j] - ts[j - 1]
                         if gap <= self.max_entry_gap:
-                            position = self._open(
-                                target, ts[j], opens[j], sd, td
+                            position = self._open_position(
+                                target, ts[j], opens[j], spec_row, specs,
+                                require_stop=False,
                             )
+                            if position is None:
+                                self.skipped_entries += 1
 
             # 2. Check stop / target inside this candle.
             if position is not None:
@@ -169,7 +170,7 @@ class Backtester:
                         continue
                     stopped_side = None
 
-                pending = (sig[j], stop_dist[j], target_dist[j])
+                pending = (sig[j], j)
 
         # Close anything still open at the final close.
         if position is not None:
@@ -178,12 +179,6 @@ class Backtester:
         return self.trades
 
     def _simulate_events(self, signals: pd.DataFrame) -> list[Trade]:
-        for column in ("stop_price", "target_r"):
-            if column not in signals.columns:
-                raise ValueError(
-                    f"Event strategies need a '{column}' column."
-                )
-
         n = len(self.data)
         if n == 0:
             return self.trades
@@ -197,8 +192,7 @@ class Backtester:
         entry = (
             signals["entry"].fillna(0).to_numpy(dtype=float)
         ).clip(-1, 1).round().astype(int)
-        stops = signals["stop_price"].to_numpy(dtype=float)
-        multiples = signals["target_r"].to_numpy(dtype=float)
+        specs = self._spec_arrays(signals)
 
         position: Position | None = None
         pending = None
@@ -206,13 +200,14 @@ class Backtester:
         for j in range(n):
             # 1. Fill the entry requested on the previous candle.
             if pending is not None:
-                side, stop_price, multiple = pending
+                side, spec_row = pending
                 pending = None
 
                 if position is None:
                     if ts[j] - ts[j - 1] <= self.max_entry_gap:
-                        position = self._open_event(
-                            side, ts[j], opens[j], stop_price, multiple
+                        position = self._open_position(
+                            side, ts[j], opens[j], spec_row, specs,
+                            require_stop=True,
                         )
                         if position is None:
                             self.skipped_entries += 1
@@ -229,50 +224,26 @@ class Backtester:
 
             # 3. New entry request, filled at the next open.
             if j < n - 1 and entry[j] != 0:
-                pending = (entry[j], stops[j], multiples[j])
+                pending = (entry[j], j)
 
         if position is not None:
             self._close(position, ts[-1], closes[-1], "end_of_data")
 
         return self.trades
 
-    def _open_event(self, side, time, market_open, stop_price, multiple):
-        if pd.isna(stop_price) or pd.isna(multiple) or multiple <= 0:
-            return None
-
-        if side == 1:
-            risk = market_open - stop_price
-            if risk <= 0:
-                return None
-            name = "long"
-            price = self.execution.buy_price(market_open)
-            target = market_open + multiple * risk
-        else:
-            risk = stop_price - market_open
-            if risk <= 0:
-                return None
-            name = "short"
-            price = self.execution.sell_price(market_open)
-            target = market_open - multiple * risk
-
-        return Position(
-            side=name,
-            entry_time=time,
-            entry_price=price,
-            quantity=self.quantity,
-            stop_loss=float(stop_price),
-            take_profit=float(target),
-        )
-
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _optional_column(signals: pd.DataFrame, name: str):
-        if name in signals.columns:
-            return signals[name].to_numpy(dtype=float)
-        return [float("nan")] * len(signals)
+    def _spec_arrays(signals: pd.DataFrame) -> dict:
+        """Exit-level columns as numpy arrays (missing columns omitted)."""
+        names = ("stop_price", "stop_distance", "target_price",
+                 "target_distance", "target_r")
+        return {
+            name: signals[name].to_numpy(dtype=float)
+            for name in names if name in signals.columns
+        }
 
     @staticmethod
     def _side_value(position: Position | None) -> int:
@@ -280,25 +251,76 @@ class Backtester:
             return 0
         return 1 if position.side == "long" else -1
 
-    def _open(self, target, time, market_open, stop_d, target_d) -> Position:
-        if target == 1:
-            side = "long"
-            price = self.execution.buy_price(market_open)
-            stop = None if pd.isna(stop_d) else market_open - stop_d
-            take = None if pd.isna(target_d) else market_open + target_d
+    def _resolve_levels(self, side, market_open, row, specs, require_stop):
+        """Return (stop, target) prices for a fill, or None if invalid.
+
+        Priority: stop_price > stop_distance; target_price >
+        target_distance > target_r. Levels on the wrong side of the fill
+        price make the entry invalid.
+        """
+        sign = 1 if side == 1 else -1
+
+        def value(name):
+            array = specs.get(name)
+            if array is None:
+                return None
+            v = array[row]
+            return None if v != v else float(v)
+
+        stop = None
+        stop_price = value("stop_price")
+        stop_distance = value("stop_distance")
+        if stop_price is not None:
+            stop = stop_price
+        elif stop_distance is not None:
+            stop = market_open - sign * stop_distance
+
+        if stop is None and require_stop:
+            return None
+        if stop is not None and sign * (market_open - stop) <= 0:
+            return None
+
+        target = None
+        target_price = value("target_price")
+        target_distance = value("target_distance")
+        target_r = value("target_r")
+        if target_price is not None:
+            target = target_price
+        elif target_distance is not None:
+            target = market_open + sign * target_distance
+        elif target_r is not None:
+            if stop is None:
+                return None
+            target = market_open + sign * target_r * abs(market_open - stop)
+
+        if target is not None and sign * (target - market_open) <= 0:
+            return None
+        if require_stop and target is None:
+            return None
+
+        return stop, target
+
+    def _open_position(self, side, time, market_open, row, specs,
+                       require_stop):
+        levels = self._resolve_levels(
+            side, market_open, row, specs, require_stop)
+        if levels is None:
+            return None
+
+        stop, target = levels
+
+        if side == 1:
+            name, price = "long", self.execution.buy_price(market_open)
         else:
-            side = "short"
-            price = self.execution.sell_price(market_open)
-            stop = None if pd.isna(stop_d) else market_open + stop_d
-            take = None if pd.isna(target_d) else market_open - target_d
+            name, price = "short", self.execution.sell_price(market_open)
 
         return Position(
-            side=side,
+            side=name,
             entry_time=time,
             entry_price=price,
             quantity=self.quantity,
             stop_loss=stop,
-            take_profit=take,
+            take_profit=target,
         )
 
     def _check_exits(self, position: Position, o, h, l):

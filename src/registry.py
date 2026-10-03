@@ -156,8 +156,31 @@ def save_strategy(
 
 
 def load_strategy_class(strategy_id: str):
-    """Import strategies/<id>.py and return its single strategy class."""
+    """Return the strategy class (kept for compatibility)."""
+    classes = _find_classes(_load_module(strategy_id))
+    if len(classes) != 1:
+        raise ValueError(
+            "Strategy file must define exactly one class with a "
+            f"generate_signals method (found {len(classes)})."
+        )
+    return classes[0]
 
+
+FUNCTION_NAMES = ("generate_signals", "strategy", "signals")
+
+
+class FunctionStrategy:
+    """Adapter so a plain function can be used as a strategy."""
+
+    def __init__(self, func, **params):
+        self._func = func
+        self._params = params
+
+    def generate_signals(self, data):
+        return self._func(data, **self._params)
+
+
+def _load_module(strategy_id: str):
     if not valid_id(strategy_id):
         raise ValueError("Invalid strategy id.")
 
@@ -171,23 +194,63 @@ def load_strategy_class(strategy_id: str):
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
 
-    classes = [
+
+def _find_classes(module):
+    return [
         cls
         for _, cls in inspect.getmembers(module, inspect.isclass)
         if cls.__module__ == module.__name__
         and callable(getattr(cls, "generate_signals", None))
     ]
 
-    if len(classes) != 1:
-        raise ValueError(
-            "Strategy file must define exactly one class with a "
-            f"generate_signals method (found {len(classes)})."
-        )
 
-    return classes[0]
+def _find_function(module):
+    functions = {
+        name: func
+        for name, func in inspect.getmembers(module, inspect.isfunction)
+        if func.__module__ == module.__name__
+    }
+
+    for name in FUNCTION_NAMES:
+        if name in functions:
+            return functions[name]
+
+    public = [f for n, f in functions.items() if not n.startswith("_")]
+    if len(public) == 1:
+        return public[0]
+
+    return None
 
 
 def build_strategy(strategy_id: str, params: dict | None = None):
-    cls = load_strategy_class(strategy_id)
-    return cls(**(params or {}))
+    """Build a strategy from strategies/<id>.py.
+
+    Accepts exactly one class with generate_signals(data), or a function
+    named generate_signals / strategy / signals (or the only public
+    function in the file) taking `data` plus keyword parameters.
+    """
+
+    module = _load_module(strategy_id)
+    params = params or {}
+    classes = _find_classes(module)
+
+    if len(classes) == 1:
+        return classes[0](**params)
+
+    if len(classes) > 1:
+        raise ValueError(
+            "Strategy file defines several strategy classes "
+            f"({[c.__name__ for c in classes]}). Keep exactly one."
+        )
+
+    func = _find_function(module)
+
+    if func is None:
+        raise ValueError(
+            "No strategy found. Define one class with a generate_signals "
+            "method, or a function named generate_signals(data)."
+        )
+
+    return FunctionStrategy(func, **params)

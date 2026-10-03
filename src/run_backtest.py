@@ -143,6 +143,8 @@ def run_experiment(
             "last_year": last_year,
             "candles": len(data),
             "lookahead_check": "passed",
+            "normalizer_warnings": backtester.warnings,
+            "skipped_entries": backtester.skipped_entries,
             "yearly_pnl": yearly_pnl(trades) if trades else {},
             "config": {
                 "strategy": strategy_id,
@@ -206,7 +208,7 @@ def main():
     print()
     print("=== Summary ===")
     for key, value in summary.items():
-        if key in ("config", "yearly_pnl", "params"):
+        if key in ("config", "yearly_pnl", "params", "normalizer_warnings"):
             continue
         if isinstance(value, float):
             value = round(value, 4)
