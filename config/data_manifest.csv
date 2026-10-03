@@ -1,0 +1,3 @@
+date,year,raw_file,status,rows,processed_file,notes
+2025-01-01,2025,XAU-USD_1Minute_BID_2025-01-01_00_00-23_59_Etc_UTC.csv,processed,60,XAUUSD_5m_BID_2025-01-01.csv,2025-01-01 23:00:00+00:00 to 2025-01-01 23:59:00+00:00
+2025-01-03,2025,XAU-USD_1Minute_BID_2025-01-03_00_00-23_59_Etc_UTC.csv,processed,1320,XAUUSD_5m_BID_2025-01-03.csv,2025-01-03 00:00:00+00:00 to 2025-01-03 21:59:00+00:00

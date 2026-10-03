@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 
 import pandas as pd
 
@@ -37,15 +38,15 @@ def process_file(input_path: str | Path, output_path: str | Path):
 
 
 if __name__ == "__main__":
-    input_file = (
-        "data/raw/"
-        "XAU-USD_1Minute_BID_2026-10-02_00_00-23_59_Etc_UTC.csv"
-    )
+    if len(sys.argv) != 3:
+        print(
+            "Usage: python -m src.process_data "
+            "<input.csv> <output.csv>"
+        )
+        raise SystemExit(1)
 
-    output_file = (
-        "data/processed/"
-        "XAUUSD_5m_BID_2026-10-02.csv"
-    )
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
 
     result = process_file(
         input_file,
