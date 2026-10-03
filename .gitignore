@@ -12,3 +12,4 @@ data/processed/*
 results/*
 
 !.gitkeep
+data/quarantine_oos/
