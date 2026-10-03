@@ -46,21 +46,34 @@ def validate_dataset(year: str):
 
     if errors:
         print("OHLC validation errors:")
+
         for error in errors:
             print(f"- {error}")
     else:
         print("OHLC validation: PASS")
 
-    duplicate_timestamps = data["timestamp"].duplicated().sum()
+    duplicate_timestamps = int(
+        data["timestamp"].duplicated().sum()
+    )
 
     print(f"Rows: {len(data)}")
-    print(f"Unique timestamps: {data['timestamp'].nunique()}")
-    print(f"Duplicate timestamps: {duplicate_timestamps}")
+    print(
+        f"Unique timestamps: "
+        f"{data['timestamp'].nunique()}"
+    )
+    print(
+        f"Duplicate timestamps: "
+        f"{duplicate_timestamps}"
+    )
 
     if data.empty:
         return
 
-    data = data.sort_values("timestamp").reset_index(drop=True)
+    data = (
+        data
+        .sort_values("timestamp")
+        .reset_index(drop=True)
+    )
 
     first_timestamp = data["timestamp"].iloc[0]
     last_timestamp = data["timestamp"].iloc[-1]
@@ -69,20 +82,24 @@ def validate_dataset(year: str):
     print(f"Last timestamp: {last_timestamp}")
 
     gaps = data["timestamp"].diff()
-    unexpected_gaps = gaps[
+
+    long_gaps = gaps[
         gaps.notna()
-        & (gaps != pd.Timedelta(minutes=5))
+        & (gaps > pd.Timedelta(minutes=5))
     ]
 
-    print(
-        f"Non-5-minute gaps: "
-        f"{len(unexpected_gaps)}"
-    )
+    print(f"Long gaps: {len(long_gaps)}")
 
-    if len(unexpected_gaps) > 0:
-        print("Gap examples:")
+    if len(long_gaps) > 0:
+        print("Largest gaps:")
 
-        for index in unexpected_gaps.head(10).index:
+        gap_rows = (
+            long_gaps
+            .sort_values(ascending=False)
+            .head(10)
+        )
+
+        for index, gap in gap_rows.items():
             previous_timestamp = data.loc[
                 index - 1,
                 "timestamp",
@@ -92,8 +109,6 @@ def validate_dataset(year: str):
                 index,
                 "timestamp",
             ]
-
-            gap = current_timestamp - previous_timestamp
 
             print(
                 f"- {previous_timestamp} -> "
@@ -106,7 +121,9 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) != 2:
-        print("Usage: python -m src.validate_dataset <year>")
+        print(
+            "Usage: python -m src.validate_dataset <year>"
+        )
         raise SystemExit(1)
 
     validate_dataset(sys.argv[1])
