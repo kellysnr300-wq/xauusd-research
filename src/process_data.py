@@ -1,19 +1,21 @@
 from pathlib import Path
 import sys
 
-import pandas as pd
-
+from src.data import load_csv
 from src.resample import resample_to_5m
 from src.validation import validate_ohlc
 
 
-def process_file(input_path: str | Path, output_path: str | Path):
+def process_file(
+    input_path: str | Path,
+    output_path: str | Path,
+):
     """Convert a Dukascopy 1-minute CSV into validated 5-minute data."""
 
     input_path = Path(input_path)
     output_path = Path(output_path)
 
-    data = pd.read_csv(input_path)
+    data = load_csv(input_path)
 
     processed = resample_to_5m(data)
 
