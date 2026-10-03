@@ -822,3 +822,143 @@ button {
         padding: 20px;
     }
 }
+
+
+/* ---------- Dashboard wiring (strategies, runs, charts) ---------- */
+
+.empty-note {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 18px 4px;
+}
+
+.strategy-footer .card-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.tag.saved {
+    background: var(--green-soft);
+    border-color: #bbf7d0;
+    color: var(--green);
+}
+
+.tag.ok {
+    background: var(--green-soft);
+    border-color: #bbf7d0;
+    color: var(--green);
+}
+
+.tag.bad {
+    background: var(--red-soft);
+    border-color: #fecaca;
+    color: var(--red);
+}
+
+.tag.busy {
+    background: var(--blue-soft);
+    border-color: #bfdbfe;
+    color: var(--blue);
+}
+
+.check-result {
+    border-radius: 9px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.check-result.ok {
+    background: var(--green-soft);
+    border: 1px solid #bbf7d0;
+    color: var(--green);
+}
+
+.check-result.bad {
+    background: var(--red-soft);
+    border: 1px solid #fecaca;
+    color: var(--red);
+}
+
+.run-panel {
+    margin-bottom: 16px;
+}
+
+.run-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+}
+
+.run-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.history-select {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: white;
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 12px;
+}
+
+.equity-canvas {
+    width: 100%;
+    height: 280px;
+    display: block;
+}
+
+.year-panel {
+    margin-top: 16px;
+}
+
+.year-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.year-table td {
+    padding: 9px 4px;
+    border-bottom: 1px solid var(--border);
+}
+
+.year-table td:last-child {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.muted-cell {
+    color: var(--muted);
+}
+
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+
+@media (max-width: 800px) {
+    .run-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .run-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .equity-canvas {
+        height: 230px;
+    }
+}
+
+.hidden {
+    display: none !important;
+}

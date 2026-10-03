@@ -1,0 +1,10 @@
+{
+  "id": "ma_cross",
+  "name": "MA Crossover Baseline",
+  "type": "Trend",
+  "description": "Benchmark: long when the fast SMA is above the slow SMA, short when below. Result 2016-2025: PnL -6,057, PF 0.84 (see EXPERIMENTS.md).",
+  "params": {"fast": 20, "slow": 50},
+  "status": "saved",
+  "created": "2026-10-03T00:00:00",
+  "updated": "2026-10-03T00:00:00"
+}
