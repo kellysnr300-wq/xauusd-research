@@ -13,3 +13,4 @@ results/*
 
 !.gitkeep
 data/quarantine_oos/
+download.log
