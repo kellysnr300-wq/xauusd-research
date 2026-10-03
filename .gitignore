@@ -5,6 +5,10 @@ __pycache__/
 
 data/raw/*
 data/processed/*
+
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
 results/*
 
 !.gitkeep
