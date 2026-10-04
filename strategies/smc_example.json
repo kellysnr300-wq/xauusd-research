@@ -1,0 +1,18 @@
+{
+  "id": "smc_example",
+  "name": "SMC Example (trend + FVG retest in killzone)",
+  "type": "Other",
+  "description": "Demo of the SMC building blocks, not a tuned strategy: trade with the BOS/CHoCH trend on the retest of a fair value gap inside London / NY AM. Copy it and change the recipe.",
+  "params": {
+    "swing": 2,
+    "min_gap": 0.5,
+    "buffer": 0.3,
+    "target_r": 2.0,
+    "killzones": "london,ny_am",
+    "min_risk": 1.0,
+    "max_risk": 25.0
+  },
+  "status": "draft",
+  "created": "2026-10-04T00:00:00",
+  "updated": "2026-10-04T00:00:00"
+}

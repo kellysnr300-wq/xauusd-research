@@ -99,3 +99,20 @@ def resample_ohlc(data: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     result = result.dropna(subset=["open", "high", "low", "close"])
     result.index.name = "timestamp"
     return result.reset_index()
+
+
+def bar_end_times(labels, timeframe: str) -> pd.DatetimeIndex:
+    """When each candle (labelled by its open time) is finished (UTC).
+
+    Intraday candles end `timeframe` after they open. Daily candles end at
+    the next 17:00 New York wall-clock time, so 23h / 25h daylight-saving
+    days are handled correctly.
+    """
+    check_timeframe(timeframe)
+    opened = pd.DatetimeIndex(labels)
+
+    if timeframe == "1d":
+        wall = opened.tz_convert(DAY_ZONE).tz_localize(None)
+        return (wall + pd.Timedelta(days=1)).tz_localize(DAY_ZONE).tz_convert("UTC")
+
+    return opened + timeframe_delta(timeframe)
