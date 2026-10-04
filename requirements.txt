@@ -4,3 +4,5 @@
 # python-scipy
 
 # Additional pure-Python dependencies will be added here if needed.
+
+tzdata

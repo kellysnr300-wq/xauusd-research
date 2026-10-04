@@ -1,0 +1,12 @@
+{
+  "id": "momentum_breakout",
+  "name": "Momentum breakout",
+  "type": "Other",
+  "description": "After tights compression take the first strong expansion bar",
+  "params": {
+    "length": 20
+  },
+  "status": "saved",
+  "created": "2026-10-03T19:30:39",
+  "updated": "2026-10-03T19:31:08"
+}

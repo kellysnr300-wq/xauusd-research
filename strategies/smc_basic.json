@@ -1,0 +1,12 @@
+{
+  "id": "smc_basic",
+  "name": "SMC basic",
+  "type": "Other",
+  "description": "",
+  "params": {
+    "length": 20
+  },
+  "status": "saved",
+  "created": "2026-10-03T20:00:53",
+  "updated": "2026-10-03T20:19:39"
+}

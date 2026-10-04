@@ -1,0 +1,12 @@
+{
+  "id": "grok_atr_mean_reversion",
+  "name": "Grok ATR mean Reversion",
+  "type": "Mean Reversion",
+  "description": "Rules, evaluated on closed 5-minute bars only:\nTrend: fast EMA(20) above slow EMA(50) for longs; the reverse for shorts. Price must also be on the correct side of EMA(20).\nPullback entry: in an uptrend, RSI(14) dips to 40 or below, then closes back above 40 while the bar closes above EMA(20). Mirror for shorts (RSI tags 60+, then closes back below 60).\nVolatility filter: skip the bar if ATR(14) is below its 50-bar median (dead market) or the bar range is more than 2.5\u00d7 ATR (news spike).\nRisk: stop at 1.5\u00d7 ATR from entry. Take profit at 2.5\u00d7 ATR (about 1.67R). Move stop to breakeven after 1R.\nSession: only trade a defined session (default 09:35\u201315:45 exchange time). Flatten at session end. One position at a time. Cooldown of 3 bars after an exit",
+  "params": {
+    "length": 20
+  },
+  "status": "saved",
+  "created": "2026-10-03T19:12:44",
+  "updated": "2026-10-03T19:21:05"
+}

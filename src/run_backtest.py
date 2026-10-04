@@ -26,6 +26,10 @@ from src.equity import build_equity_curve
 from src.execution import ExecutionModel
 from src.lookahead import check_no_lookahead
 from src.metrics import calculate_metrics
+from src.timeframes import (
+    BASE_TIMEFRAME, TIMEFRAMES, check_timeframe, max_entry_gap_for,
+    resample_ohlc,
+)
 
 RESULTS_ROOT = Path("results")
 LOOKAHEAD_SAMPLE = 20_000
@@ -100,6 +104,7 @@ def run_experiment(
     quantity: float = 1.0,
     capital: float = 10_000.0,
     run_id: str | None = None,
+    timeframe: str = BASE_TIMEFRAME,
 ) -> Path:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_id = run_id or f"{stamp}_{strategy_id}"
@@ -107,8 +112,14 @@ def run_experiment(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        check_timeframe(timeframe)
         write_status(run_dir, "loading", message="Loading data")
         data = load_development(first_year, last_year)
+
+        if timeframe != BASE_TIMEFRAME:
+            write_status(run_dir, "resampling",
+                         message=f"Building {timeframe} candles")
+            data = resample_ohlc(data, timeframe)
 
         def factory():
             return registry.build_strategy(strategy_id, params)
@@ -127,6 +138,7 @@ def run_experiment(
             initial_capital=capital,
             execution=ExecutionModel(spread=spread, slippage=slippage),
             quantity=quantity,
+            max_entry_gap=max_entry_gap_for(timeframe),
         )
         trades = backtester.simulate()
 
@@ -142,6 +154,7 @@ def run_experiment(
             "first_year": first_year,
             "last_year": last_year,
             "candles": len(data),
+            "timeframe": timeframe,
             "lookahead_check": "passed",
             "normalizer_warnings": backtester.warnings,
             "skipped_entries": backtester.skipped_entries,
@@ -152,6 +165,7 @@ def run_experiment(
                 "slippage": slippage,
                 "quantity": quantity,
                 "capital": capital,
+                "timeframe": timeframe,
             },
         })
 
@@ -183,6 +197,8 @@ def main():
     parser.add_argument("--quantity", type=float, default=1.0)
     parser.add_argument("--capital", type=float, default=10_000.0)
     parser.add_argument("--run-id", default=None)
+    parser.add_argument("--timeframe", default=BASE_TIMEFRAME,
+                        choices=list(TIMEFRAMES))
     args = parser.parse_args()
 
     if args.params is None:
@@ -196,7 +212,7 @@ def main():
         run_dir = run_experiment(
             args.strategy_id, params, args.first_year, args.last_year,
             args.spread, args.slippage, args.quantity, args.capital,
-            args.run_id,
+            args.run_id, args.timeframe,
         )
     except Exception as error:
         print(f"FAILED: {error}", file=sys.stderr)

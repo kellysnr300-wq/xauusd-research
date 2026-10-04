@@ -353,6 +353,42 @@ function setRunStatus(text, kind = "") {
     tag.className = "tag " + kind;
 }
 
+const RUN_LABEL = "Run backtest";
+let runTimer = null;
+let runStarted = 0;
+
+function formatElapsed(ms) {
+    const total = Math.floor(ms / 1000);
+    const minutes = Math.floor(total / 60);
+    const seconds = total % 60;
+    return minutes
+        ? `${minutes}m ${String(seconds).padStart(2, "0")}s`
+        : `${seconds}s`;
+}
+
+/* The button shows WHAT is happening; the tag at the top shows HOW LONG. */
+function setRunButton(running, text) {
+    const button = $("runButton");
+    button.disabled = running;
+    button.classList.toggle("running", running);
+    button.textContent = running ? text : RUN_LABEL;
+}
+
+function startRunTimer() {
+    clearInterval(runTimer);
+    runStarted = Date.now();
+    setRunStatus("0s", "busy");
+    runTimer = setInterval(() => {
+        setRunStatus(formatElapsed(Date.now() - runStarted), "busy");
+    }, 500);
+}
+
+function stopRunTimer() {
+    clearInterval(runTimer);
+    runTimer = null;
+    return Date.now() - runStarted;
+}
+
 $("runButton").addEventListener("click", async () => {
     if (!selectedId) {
         showToast("Create a strategy first.");
@@ -367,10 +403,14 @@ $("runButton").addEventListener("click", async () => {
         return;
     }
 
+    setRunButton(true, "Starting…");
+    startRunTimer();
+
     try {
         const { run_id } = await api("/runs", "POST", {
             strategy_id: selectedId,
             params,
+            timeframe: $("runTimeframe").value,
             first_year: Number($("runFirst").value),
             last_year: Number($("runLast").value),
             spread: Number($("runSpread").value),
@@ -379,51 +419,54 @@ $("runButton").addEventListener("click", async () => {
         });
         pollRun(run_id);
     } catch (error) {
+        stopRunTimer();
+        setRunButton(false);
+        setRunStatus("Idle");
         showToast(error.message);
     }
 });
 
 function pollRun(runId) {
     clearInterval(pollTimer);
-    const started = Date.now();
-    $("runButton").disabled = true;
 
     const tick = async () => {
         try {
             const detail = await api("/runs/" + runId);
             const stage = detail.status.stage;
-            const seconds = Math.round((Date.now() - started) / 1000);
+            const message = detail.status.message || stage;
 
             if (stage === "done") {
                 clearInterval(pollTimer);
-                setRunStatus("Loading results…", "busy");
+                setRunButton(true, "Loading results…");
                 await loadStrategies();
                 await loadHistory(false, runId);
-                $("runButton").disabled = false;
-                setRunStatus("Done", "ok");
+                const took = stopRunTimer();
+                setRunButton(false);
+                setRunStatus(`Done in ${formatElapsed(took)}`, "ok");
                 return;
             }
 
             if (stage === "failed") {
                 clearInterval(pollTimer);
-                $("runButton").disabled = false;
+                stopRunTimer();
+                setRunButton(false);
                 setRunStatus("Failed", "bad");
-                showToast(detail.status.message || "Backtest failed.");
+                showToast(message || "Backtest failed.");
                 return;
             }
 
-            setRunStatus(
-                `${detail.status.message || stage} · ${seconds}s`, "busy");
+            setRunButton(true, message.replace(/…$/, "") + "…");
         } catch (error) {
             clearInterval(pollTimer);
-            $("runButton").disabled = false;
+            stopRunTimer();
+            setRunButton(false);
             setRunStatus("Error", "bad");
             showToast(error.message);
         }
     };
 
     tick();
-    pollTimer = setInterval(tick, 1500);
+    pollTimer = setInterval(tick, 800);
 }
 
 async function loadHistory(autoShowLatest, preferRunId) {
@@ -446,6 +489,7 @@ async function loadHistory(autoShowLatest, preferRunId) {
                 const pf = r.profit_factor === null || r.profit_factor === undefined
                     ? "—" : r.profit_factor.toFixed(2);
                 return `<option value="${r.run_id}">${when} · ` +
+                    `${r.timeframe || "5m"} · ` +
                     `${r.first_year ?? "?"}–${r.last_year ?? "?"} · ` +
                     `PnL ${money(r.total_pnl, 0)} · PF ${pf}</option>`;
             }).join("")
@@ -526,7 +570,7 @@ function renderRun(detail) {
     $("kpiNet").textContent = money(s.total_pnl, 0);
     $("kpiNet").className = signClass(s.total_pnl);
     $("kpiNetSub").textContent =
-        `${(s.trade_count ?? 0).toLocaleString()} trades · ${s.first_year ?? "?"}–${s.last_year ?? "?"}`;
+        `${(s.trade_count ?? 0).toLocaleString()} trades · ${s.first_year ?? "?"}–${s.last_year ?? "?"} · ${s.timeframe || "5m"}`;
 
     $("kpiPF").textContent =
         s.profit_factor == null ? "—" : s.profit_factor.toFixed(2);
@@ -560,6 +604,7 @@ function renderRun(detail) {
         : '<tr><td class="muted-cell">No data</td></tr>';
 
     $("equityTag").textContent =
+        `${s.timeframe || "5m"} · ` +
         `${s.params && Object.keys(s.params).length
             ? JSON.stringify(s.params) : "no params"}`;
     $("equityEmpty").classList.add("hidden");

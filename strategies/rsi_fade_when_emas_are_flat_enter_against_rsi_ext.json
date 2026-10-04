@@ -1,0 +1,12 @@
+{
+  "id": "rsi_fade_when_emas_are_flat_enter_against_rsi_ext",
+  "name": "RSI fade when EMAs are flat Enter against RSI extremes only",
+  "type": "Other",
+  "description": "",
+  "params": {
+    "length": 20
+  },
+  "status": "saved",
+  "created": "2026-10-03T19:42:07",
+  "updated": "2026-10-03T19:42:22"
+}

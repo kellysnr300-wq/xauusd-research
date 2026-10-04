@@ -28,6 +28,7 @@ os.chdir(ROOT)
 
 from src import registry  # noqa: E402
 from src.paths import OOS_START  # noqa: E402
+from src.timeframes import BASE_TIMEFRAME, TIMEFRAMES  # noqa: E402
 
 DASHBOARD = (ROOT / "dashboard").resolve()
 RESULTS = ROOT / "results"
@@ -115,6 +116,9 @@ def list_runs(strategy_id: str | None) -> list[dict]:
                           or summary.get("config", {}).get("last_year"))
             if summary else None,
             "created": summary.get("created") if summary else None,
+            "timeframe": (summary.get("timeframe")
+                          or summary.get("config", {}).get("timeframe")
+                          or BASE_TIMEFRAME) if summary else None,
         })
 
     return runs[:100]
@@ -133,6 +137,7 @@ def enrich_legacy(summary: dict, run_dir: Path) -> None:
     config = summary.get("config", {})
 
     summary.setdefault("strategy_id", config.get("strategy"))
+    summary.setdefault("timeframe", config.get("timeframe", BASE_TIMEFRAME))
     summary.setdefault("first_year", config.get("first_year"))
     summary.setdefault("last_year", config.get("last_year"))
     summary.setdefault(
@@ -252,6 +257,10 @@ def start_run(body: dict) -> dict:
     if first > last:
         raise ApiError(400, "First year must not be after last year.")
 
+    timeframe = body.get("timeframe", BASE_TIMEFRAME)
+    if timeframe not in TIMEFRAMES:
+        raise ApiError(400, f"Unknown timeframe. Choose from: {', '.join(TIMEFRAMES)}.")
+
     spread = number(body, "spread", 0.30, 0, 20)
     slippage = number(body, "slippage", 0.05, 0, 20)
     quantity = number(body, "quantity", 1.0, 0.0001, 1000)
@@ -282,7 +291,7 @@ def start_run(body: dict) -> dict:
                 "--params", json.dumps(params),
                 "--spread", str(spread), "--slippage", str(slippage),
                 "--quantity", str(quantity), "--capital", str(capital),
-                "--run-id", run_id,
+                "--run-id", run_id, "--timeframe", timeframe,
             ],
             cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
             start_new_session=True,
@@ -435,6 +444,10 @@ class Handler(BaseHTTPRequestHandler):
     # -- API routes -----------------------------------------------------
 
     def route(self, method, path, query):
+        if method == "GET" and path == "/timeframes":
+            return {"timeframes": [
+                {"id": k, "label": v["label"]} for k, v in TIMEFRAMES.items()]}
+
         if method == "GET" and path == "/strategies":
             return {"strategies": registry.list_strategies()}
 
