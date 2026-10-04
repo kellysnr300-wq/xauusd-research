@@ -1,0 +1,26 @@
+{
+  "id": "smc_v1",
+  "name": "SMC v1 (OB retest + killzone + HTF bias)",
+  "type": "Breakout",
+  "description": "Retest of the order block created by a BOS/CHoCH, taken only inside London / NY AM and with the 1h trend. Optional liquidity-sweep filter. Stop beyond the block, target 3R. Shows a setup funnel so you can see which filter removes trades.",
+  "params": {
+    "swing": 2,
+    "kinds": "both",
+    "lookback": 5,
+    "zone": "range",
+    "max_age": 200,
+    "htf": "1h",
+    "htf_swing": 1,
+    "killzones": "london,ny_am",
+    "require_sweep": false,
+    "sweep_levels": "asia,pd,swing",
+    "sweep_window": 24,
+    "buffer": 0.3,
+    "target_r": 3.0,
+    "min_risk": 1.0,
+    "max_risk": 25.0
+  },
+  "status": "saved",
+  "created": "2026-10-04T00:00:00",
+  "updated": "2026-10-04T00:00:00"
+}

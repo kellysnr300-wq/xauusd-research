@@ -285,6 +285,14 @@ def normalize_output(raw, data: pd.DataFrame, atr_period: int = 14) -> Normalize
                     "target_pct or target_atr."
                 )
 
+    if not (direction != 0).any():
+        what = "entries" if mode == "event" else "signals"
+        warnings.append(
+            f"The strategy produced no {what} at all on this data (every "
+            "row is 0). Its conditions may never be true, or filters may "
+            "be too strict."
+        )
+
     # ---- unknown columns --------------------------------------------------
     ignored_cols = sorted(columns - used)
     if ignored_cols:

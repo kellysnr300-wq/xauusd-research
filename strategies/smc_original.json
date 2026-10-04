@@ -1,0 +1,12 @@
+{
+  "id": "smc_original",
+  "name": "SMC original",
+  "type": "Other",
+  "description": "",
+  "params": {
+    "length": 20
+  },
+  "status": "saved",
+  "created": "2026-10-04T03:39:35",
+  "updated": "2026-10-04T03:41:09"
+}

@@ -990,3 +990,10 @@ button {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+#equityTag {
+    max-width: 55%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

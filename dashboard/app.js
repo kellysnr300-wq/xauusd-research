@@ -331,7 +331,12 @@ $("checkStrategy").addEventListener("click", async () => {
     try {
         const result = await api(`/strategies/${saved.id}/check`, "POST", {});
         if (result.ok) {
-            const notes = result.info.notes || [];
+            const notes = [...(result.info.notes || [])];
+            const funnel = funnelLines(result.info.diagnostics);
+            if (funnel.length) {
+                notes.push("Setup funnel on synthetic data:\n    " +
+                    funnel.join("\n    "));
+            }
             showCheck(true,
                 "Check passed: output is valid and uses no future data " +
                 `(${result.info.synthetic_trades} trades on synthetic data).` +
@@ -525,14 +530,30 @@ async function showRun(runId) {
 
 /* ---------- rendering results ---------- */
 
+function funnelLines(diagnostics) {
+    if (!diagnostics) return [];
+    return Object.entries(diagnostics).map(
+        ([label, count]) => `${label}: ${Number(count).toLocaleString()}`);
+}
+
 function renderNotes(s) {
     const box = $("runNotes");
     const notes = s ? [...(s.normalizer_warnings || [])] : [];
+
+    if (s && s.trade_count === 0) {
+        notes.unshift("No trades were generated for this run.");
+    }
 
     if (s && s.skipped_entries) {
         notes.push(
             `${s.skipped_entries} entry attempts skipped ` +
             "(stop/target on the wrong side of the fill price).");
+    }
+
+    const funnel = s ? funnelLines(s.diagnostics) : [];
+    if (funnel.length) {
+        notes.push("Setup funnel (what each filter left):\n    " +
+            funnel.join("\n    "));
     }
 
     if (notes.length) {
@@ -574,9 +595,15 @@ function renderRun(detail) {
 
     $("kpiPF").textContent =
         s.profit_factor == null ? "—" : s.profit_factor.toFixed(2);
-    $("kpiPF").className = s.profit_factor >= 1 ? "pos" : "neg";
-    $("kpiPFSub").textContent = s.profit_factor >= 1
-        ? "Wins outweigh losses" : "Losses outweigh wins";
+    if (s.profit_factor == null) {
+        $("kpiPF").className = "";
+        $("kpiPFSub").textContent =
+            s.trade_count ? "No losing trades" : "No trades";
+    } else {
+        $("kpiPF").className = s.profit_factor >= 1 ? "pos" : "neg";
+        $("kpiPFSub").textContent = s.profit_factor >= 1
+            ? "Wins outweigh losses" : "Losses outweigh wins";
+    }
 
     $("kpiAvg").textContent = money(s.average_pnl, 3);
     $("kpiAvg").className = signClass(s.average_pnl);

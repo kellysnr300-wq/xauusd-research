@@ -52,11 +52,13 @@ def run_check(strategy_id: str, params: dict) -> dict:
         result["problems"] = problems
 
         if not problems:
-            backtester = Backtester(data, factory())
+            strategy = factory()
+            backtester = Backtester(data, strategy)
             trades = backtester.simulate()
             result["info"] = {
                 "synthetic_trades": len(trades),
                 "notes": backtester.warnings,
+                "diagnostics": getattr(strategy, "diagnostics", None),
             }
             result["ok"] = True
 

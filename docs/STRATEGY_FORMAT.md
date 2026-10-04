@@ -79,3 +79,26 @@ def generate_signals(data, length=20):
 ```
 
 See `strategies/break_retest_ob.py` for a full class-based example.
+
+## When a run produces no trades
+
+The dashboard now says so ("No trades were generated") instead of showing
+empty numbers. The usual causes, in order of likelihood:
+
+1. **Filters too strict.** Every extra condition (killzone, higher-timeframe
+   bias, liquidity sweep, CHoCH, order block, FVG) multiplies the odds down.
+   A strategy can expose `self.diagnostics = {"label": count, ...}` after
+   `generate_signals`; the dashboard shows it as a setup funnel so you can
+   see which filter removed the setups. `strategies/smc_v1.py` is an example.
+2. **A condition that can never be true** (wrong sign, a `shift` in the
+   wrong direction, comparing against a column that is always NaN). The run
+   notes then say "no entries at all on this data (every row is 0)".
+3. **Stops on the wrong side of the entry**, so every entry is skipped. The
+   notes show "entry attempts skipped".
+4. **Timeframe / data mismatch**, e.g. a 1-hour setting on daily candles.
+5. **Output format** problems are rejected with an explicit message before
+   the run starts.
+
+Entries can also exceed trades: the engine holds one position at a time and
+ignores new entries while a trade is open. The funnel's last line shows how
+many trades were actually taken.

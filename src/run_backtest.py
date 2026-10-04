@@ -94,6 +94,15 @@ def yearly_pnl(trades) -> dict:
     }
 
 
+def _with_trades(diagnostics, trade_count):
+    """Append how many entries the engine actually took as trades."""
+    if not diagnostics:
+        return diagnostics
+    result = dict(diagnostics)
+    result["6 trades taken (one position at a time)"] = trade_count
+    return result
+
+
 def run_experiment(
     strategy_id: str,
     params: dict,
@@ -132,9 +141,10 @@ def run_experiment(
             raise ValueError(" ".join(problems))
 
         write_status(run_dir, "simulating", message="Simulating trades")
+        strategy = factory()
         backtester = Backtester(
             data=data,
-            strategy=factory(),
+            strategy=strategy,
             initial_capital=capital,
             execution=ExecutionModel(spread=spread, slippage=slippage),
             quantity=quantity,
@@ -157,6 +167,8 @@ def run_experiment(
             "timeframe": timeframe,
             "lookahead_check": "passed",
             "normalizer_warnings": backtester.warnings,
+            "diagnostics": _with_trades(
+                getattr(strategy, "diagnostics", None), len(trades)),
             "skipped_entries": backtester.skipped_entries,
             "yearly_pnl": yearly_pnl(trades) if trades else {},
             "config": {
@@ -224,11 +236,18 @@ def main():
     print()
     print("=== Summary ===")
     for key, value in summary.items():
-        if key in ("config", "yearly_pnl", "params", "normalizer_warnings"):
+        if key in ("config", "yearly_pnl", "params", "normalizer_warnings",
+                   "diagnostics"):
             continue
         if isinstance(value, float):
             value = round(value, 4)
         print(f"{key:20s} {value}")
+
+    if summary.get("diagnostics"):
+        print()
+        print("=== Setup funnel ===")
+        for label, count in summary["diagnostics"].items():
+            print(f"{label:34s} {count}")
 
     if summary.get("yearly_pnl"):
         print()
