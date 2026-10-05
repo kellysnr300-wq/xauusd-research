@@ -20,15 +20,18 @@ import time
 import pandas as pd
 
 from src import registry
+from src.accuracy import accuracy_report
 from src.backtester import Backtester
 from src.dataset import load_development
 from src.equity import build_equity_curve
 from src.execution import ExecutionModel
+from src.intrabar import IntrabarResolver
 from src.lookahead import check_no_lookahead
 from src.metrics import calculate_metrics
 from src.timeframes import (
     BASE_TIMEFRAME, TIMEFRAMES, check_timeframe, max_entry_gap_for,
     resample_ohlc,
+    timeframe_delta,
 )
 
 RESULTS_ROOT = Path("results")
@@ -114,6 +117,7 @@ def run_experiment(
     capital: float = 10_000.0,
     run_id: str | None = None,
     timeframe: str = BASE_TIMEFRAME,
+    accuracy: bool = True,
 ) -> Path:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_id = run_id or f"{stamp}_{strategy_id}"
@@ -141,6 +145,7 @@ def run_experiment(
             raise ValueError(" ".join(problems))
 
         write_status(run_dir, "simulating", message="Simulating trades")
+        resolver = IntrabarResolver()
         strategy = factory()
         backtester = Backtester(
             data=data,
@@ -149,8 +154,16 @@ def run_experiment(
             execution=ExecutionModel(spread=spread, slippage=slippage),
             quantity=quantity,
             max_entry_gap=max_entry_gap_for(timeframe),
+            resolver=resolver,
+            bar_delta=timeframe_delta(timeframe),
         )
         trades = backtester.simulate()
+
+        accuracy_result = None
+        if accuracy:
+            write_status(run_dir, "accuracy",
+                         message="Checking result accuracy")
+            accuracy_result = accuracy_report(backtester, resolver)
 
         write_status(run_dir, "saving", message="Saving results")
         equity = build_equity_curve(capital, trades)
@@ -166,6 +179,7 @@ def run_experiment(
             "candles": len(data),
             "timeframe": timeframe,
             "lookahead_check": "passed",
+            "accuracy": accuracy_result,
             "normalizer_warnings": backtester.warnings,
             "diagnostics": _with_trades(
                 getattr(strategy, "diagnostics", None), len(trades)),
@@ -185,9 +199,13 @@ def run_experiment(
             json.dumps(summary, indent=2, default=str)
         )
         equity.to_csv(run_dir / "equity.csv", index=False)
-        pd.DataFrame([t.__dict__ for t in trades]).to_csv(
-            run_dir / "trades.csv", index=False
-        )
+        trade_table = pd.DataFrame([t.__dict__ for t in trades])
+        if len(trade_table):
+            trade_table["ambiguous_exit"] = [
+                m["ambiguous"] for m in backtester.trade_meta]
+            trade_table["settled_with_1m"] = [
+                m["resolved"] for m in backtester.trade_meta]
+        trade_table.to_csv(run_dir / "trades.csv", index=False)
 
         write_status(run_dir, "done", message="Done")
         return run_dir
@@ -209,6 +227,7 @@ def main():
     parser.add_argument("--quantity", type=float, default=1.0)
     parser.add_argument("--capital", type=float, default=10_000.0)
     parser.add_argument("--run-id", default=None)
+    parser.add_argument("--skip-accuracy", action="store_true")
     parser.add_argument("--timeframe", default=BASE_TIMEFRAME,
                         choices=list(TIMEFRAMES))
     args = parser.parse_args()
@@ -224,7 +243,7 @@ def main():
         run_dir = run_experiment(
             args.strategy_id, params, args.first_year, args.last_year,
             args.spread, args.slippage, args.quantity, args.capital,
-            args.run_id, args.timeframe,
+            args.run_id, args.timeframe, not args.skip_accuracy,
         )
     except Exception as error:
         print(f"FAILED: {error}", file=sys.stderr)
@@ -237,11 +256,32 @@ def main():
     print("=== Summary ===")
     for key, value in summary.items():
         if key in ("config", "yearly_pnl", "params", "normalizer_warnings",
-                   "diagnostics"):
+                   "diagnostics", "accuracy"):
             continue
         if isinstance(value, float):
             value = round(value, 4)
         print(f"{key:20s} {value}")
+
+    acc = summary.get("accuracy")
+    if acc:
+        lo, hi = acc["win_rate_engine_range"]
+        band = acc["win_rate_band"]
+        print()
+        print("=== Result accuracy ===")
+        print(f"engine uncertainty   {acc['verdict']} "
+              f"(win rate {lo:.1f}% to {hi:.1f}% across assumptions)")
+        print(f"sample               {acc['sample']}")
+        if band[0] is not None:
+            print(f"plausible win rate   {band[0]:.1f}% to {band[1]:.1f}% "
+                  "(engine + statistical, 95%)")
+        print(f"net P&L range        {acc['pnl_range'][0]:.1f} to "
+              f"{acc['pnl_range'][1]:.1f}")
+        print(f"ambiguous exits      {acc['ambiguous_exits']} "
+              f"({acc['resolved_with_1m']} settled with 1-minute data, "
+              f"{acc['unresolved']} assumed)")
+        minute = acc.get("one_minute_data")
+        if minute and minute["days_missing"]:
+            print(f"1-minute data        {minute['days_missing']} days missing")
 
     if summary.get("diagnostics"):
         print()

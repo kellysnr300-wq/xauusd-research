@@ -25,7 +25,10 @@ class Backtester:
     -------------------------------
     - A signal on candle i is executed at the OPEN of candle i+1.
     - The entry candle itself can already hit the stop or target.
-    - If stop and target are both touched in one candle, the stop wins.
+    - If stop and target are both touched in one candle, the 1-minute
+      data (if a resolver is given) decides which came first; otherwise
+      the `ambiguity` policy does ("stop_first" by default). A candle
+      that OPENS beyond the stop (or target) fills there, no ambiguity.
     - If a candle opens beyond a stop/target, the fill is at the open.
     - After a stop/target exit, the same signal value is ignored until
       the strategy signal changes (prevents instant re-entry).
@@ -56,7 +59,13 @@ class Backtester:
         execution: ExecutionModel | None = None,
         quantity: float = 1.0,
         max_entry_gap: pd.Timedelta = pd.Timedelta(minutes=30),
+        ambiguity: str = "stop_first",
+        resolver=None,
+        ask_triggers: bool = False,
+        bar_delta: pd.Timedelta | None = None,
     ):
+        if ambiguity not in ("stop_first", "target_first"):
+            raise ValueError("ambiguity must be 'stop_first' or 'target_first'")
         self.data = data.copy().reset_index(drop=True)
         self.strategy = strategy
         self.initial_capital = initial_capital
@@ -64,9 +73,21 @@ class Backtester:
         self.execution = execution or ExecutionModel()
         self.quantity = quantity
         self.max_entry_gap = max_entry_gap
+        self.ambiguity = ambiguity
+        self.resolver = resolver
+        self.ask_triggers = ask_triggers
+        self.bar_delta = bar_delta or self._infer_bar_delta()
         self.trades: list[Trade] = []
+        self.trade_meta: list[dict] = []
         self.skipped_entries = 0
         self.warnings: list[str] = []
+        self._signals = None
+
+    def _infer_bar_delta(self) -> pd.Timedelta:
+        stamps = pd.DatetimeIndex(self.data["timestamp"])[:200]
+        steps = stamps[1:] - stamps[:-1]
+        steps = steps[steps > pd.Timedelta(0)]
+        return steps.min() if len(steps) else pd.Timedelta(minutes=5)
 
     def run(self) -> pd.DataFrame:
         """Run the strategy and return generated signals."""
@@ -86,18 +107,27 @@ class Backtester:
     # Simulation
     # ------------------------------------------------------------------
 
-    def simulate(self) -> list[Trade]:
-        """Simulate the strategy candle by candle and return trades."""
+    def simulate(self, reuse_signals: bool = False) -> list[Trade]:
+        """Simulate the strategy candle by candle and return trades.
+
+        reuse_signals=True skips running the strategy again (used to rerun
+        the same signals under different execution assumptions).
+        """
 
         required = ["timestamp", "open", "high", "low", "close"]
         missing = [c for c in required if c not in self.data.columns]
         if missing:
             raise ValueError(f"Data is missing columns: {missing}")
 
-        signals = self.run()
+        if reuse_signals and self._signals is not None:
+            signals = self._signals
+        else:
+            signals = self.run()
+            self._signals = signals
 
         # Reset state so simulate() can be called more than once.
         self.trades = []
+        self.trade_meta = []
         self.skipped_entries = 0
         self.portfolio = Portfolio(self.initial_capital)
 
@@ -155,12 +185,12 @@ class Backtester:
             # 2. Check stop / target inside this candle.
             if position is not None:
                 exit_fill = self._check_exits(
-                    position, opens[j], highs[j], lows[j]
+                    position, opens[j], highs[j], lows[j], ts[j]
                 )
                 if exit_fill is not None:
-                    fill, reason = exit_fill
+                    fill, reason, meta = exit_fill
                     stopped_side = self._side_value(position)
-                    self._close(position, ts[j], fill, reason)
+                    self._close(position, ts[j], fill, reason, meta)
                     position = None
 
             # 3. Read this candle's close signal (acted on next candle).
@@ -215,11 +245,11 @@ class Backtester:
             # 2. Stop / target inside this candle (entry candle included).
             if position is not None:
                 hit = self._check_exits(
-                    position, opens[j], highs[j], lows[j]
+                    position, opens[j], highs[j], lows[j], ts[j]
                 )
                 if hit is not None:
-                    fill, reason = hit
-                    self._close(position, ts[j], fill, reason)
+                    fill, reason, meta = hit
+                    self._close(position, ts[j], fill, reason, meta)
                     position = None
 
             # 3. New entry request, filled at the next open.
@@ -323,26 +353,66 @@ class Backtester:
             take_profit=target,
         )
 
-    def _check_exits(self, position: Position, o, h, l):
-        """Return (market_fill_price, reason) if stop/target is hit."""
+    def _check_exits(self, position: Position, o, h, l, start=None):
+        """Return (market_fill_price, reason, meta) if stop/target is hit.
+
+        meta = {"ambiguous": bool, "resolved": bool}: ambiguous means the
+        candle touched both levels and its open did not decide the order.
+        """
 
         stop = position.stop_loss
         take = position.take_profit
 
-        if position.side == "long":
-            if stop is not None and l <= stop:
-                return min(stop, o), "stop_loss"
-            if take is not None and h >= take:
-                return max(take, o), "take_profit"
+        if stop is None and take is None:
+            return None
+
+        long = position.side == "long"
+        adj = self.execution.spread if (self.ask_triggers and not long) else 0.0
+
+        if long:
+            stop_hit = stop is not None and l <= stop
+            take_hit = take is not None and h >= take
+            gap_stop = stop is not None and o <= stop
+            gap_take = take is not None and o >= take
         else:
-            if stop is not None and h >= stop:
-                return max(stop, o), "stop_loss"
-            if take is not None and l <= take:
-                return min(take, o), "take_profit"
+            stop_hit = stop is not None and h + adj >= stop
+            take_hit = take is not None and l + adj <= take
+            gap_stop = stop is not None and o + adj >= stop
+            gap_take = take is not None and o + adj <= take
 
-        return None
+        if not stop_hit and not take_hit:
+            return None
 
-    def _close(self, position: Position, time, market_price, reason) -> None:
+        meta = {"ambiguous": False, "resolved": False}
+
+        if stop_hit and take_hit:
+            if gap_stop:
+                choice = "stop"
+            elif gap_take:
+                choice = "target"
+            else:
+                meta["ambiguous"] = True
+                choice = None
+                if self.resolver is not None and start is not None:
+                    choice = self.resolver.first_touch(
+                        position.side, start, start + self.bar_delta,
+                        stop, take, adj,
+                    )
+                    meta["resolved"] = choice is not None
+                if choice is None:
+                    choice = "target" if self.ambiguity == "target_first" else "stop"
+        else:
+            choice = "stop" if stop_hit else "target"
+
+        if choice == "stop":
+            fill = min(stop, o) if long else max(stop, o)
+            return fill, "stop_loss", meta
+
+        fill = max(take, o) if long else min(take, o)
+        return fill, "take_profit", meta
+
+    def _close(self, position: Position, time, market_price, reason,
+               meta=None) -> None:
         if position.side == "long":
             exit_price = self.execution.exit_long_price(market_price)
             pnl = (exit_price - position.entry_price) * position.quantity
@@ -350,6 +420,7 @@ class Backtester:
             exit_price = self.execution.exit_short_price(market_price)
             pnl = (position.entry_price - exit_price) * position.quantity
 
+        self.trade_meta.append(meta or {"ambiguous": False, "resolved": False})
         self.record_trade(
             Trade(
                 side=position.side,

@@ -214,9 +214,17 @@ selectors.forEach((select) => {
     });
 });
 
+let paramsShownFor = null;
+
 function onStrategyChanged() {
     const strategy = strategies.find((s) => s.id === selectedId);
-    $("runParams").value = strategy ? JSON.stringify(strategy.params || {}) : "";
+
+    // Reset the parameter box only when a different strategy is selected,
+    // so reloading the list after a run does not wipe typed variations.
+    if (paramsShownFor !== selectedId) {
+        $("runParams").value = strategy ? JSON.stringify(strategy.params || {}) : "";
+        paramsShownFor = selectedId;
+    }
     loadHistory(true);
 }
 
@@ -301,6 +309,7 @@ async function saveCurrent(status) {
         });
         editingId = saved.id;
         editingStatus = saved.status;
+        paramsShownFor = null;
         await loadStrategies();
         return saved;
     } catch (error) {
@@ -564,10 +573,64 @@ function renderNotes(s) {
     }
 }
 
+function renderAccuracy(s) {
+    const panel = $("accuracyPanel");
+    const a = s && s.accuracy;
+
+    if (!a || !a.scenarios || !a.scenarios.central.trade_count) {
+        panel.classList.add("hidden");
+        return;
+    }
+
+    const pct = (v) => (v == null ? "—" : v.toFixed(1) + "%");
+    const [engLo, engHi] = a.win_rate_engine_range;
+    const [bandLo, bandHi] = a.win_rate_band;
+    const [ciLo, ciHi] = a.win_rate_ci95;
+    const central = a.scenarios.central;
+
+    panel.classList.remove("hidden");
+
+    const tag = $("accuracyTag");
+    tag.textContent = `engine: ${a.verdict}`;
+    tag.className = "tag " + (
+        a.verdict === "tight" ? "ok" : a.verdict === "moderate" ? "busy" : "bad");
+
+    $("accWin").textContent = pct(central.win_rate);
+    $("accWinSub").textContent =
+        `plausible ${pct(bandLo)} to ${pct(bandHi)} ` +
+        `(engine + sample noise, 95%)`;
+
+    $("accPnl").textContent =
+        `${money(a.pnl_range[0], 0)} to ${money(a.pnl_range[1], 0)}`;
+    $("accPnlSub").textContent =
+        `pessimistic to optimistic · central ${money(central.total_pnl, 0)}`;
+
+    $("accAmb").textContent =
+        `${a.ambiguous_exits} of ${central.trade_count.toLocaleString()}`;
+    const minute = a.one_minute_data;
+    $("accAmbSub").textContent =
+        `${a.resolved_with_1m} settled with 1-minute data, ` +
+        `${a.unresolved} assumed` +
+        (minute && minute.days_missing
+            ? ` · ${minute.days_missing} days had no 1-minute data` : "");
+
+    const engineHalf = (engHi - engLo) / 2;
+    const sampleHalf = (ciHi - ciLo) / 2;
+    const dominant = sampleHalf > engineHalf
+        ? "Most of the uncertainty is sample size: more trades would narrow it."
+        : "Most of the uncertainty is the engine's candle-level assumptions.";
+    $("accNote").textContent =
+        `Engine uncertainty is about ±${engineHalf.toFixed(1)} points of ` +
+        `win rate; sample noise on ${central.trade_count.toLocaleString()} ` +
+        `trades is about ±${sampleHalf.toFixed(1)} points (${a.sample}). ` +
+        dominant;
+}
+
 function renderRun(detail) {
     currentDetail = detail;
     const s = detail && detail.summary;
     renderNotes(s);
+    renderAccuracy(s);
 
     if (!s) {
         ["kpiNet", "kpiPF", "kpiAvg", "kpiRR", "ddValue", "wlValue"]
