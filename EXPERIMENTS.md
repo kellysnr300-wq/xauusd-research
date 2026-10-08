@@ -17,3 +17,12 @@
 - 3 of 9 positive in both periods; 0 of 9 on both sides.
 - Conclusion: no demonstrated edge; profit is long exposure + the 2025 rally.
   Single-market trend following cannot be validated in 17 years (needs ~44y for Sharpe 0.3).
+
+## 004 - SMC retests, market entry vs resting limit entry, 5m, 2016-2025
+- Same filters (killzone, 1h trend), 3R target, spread 0.30 + slippage 0.05.
+- SMC v1 (next open): 5096 trades, win 25.9%, PnL -1645, PF 0.85, 0/10 years positive.
+- SMC Limit (resting): 4797 trades, win 25.5%, PnL -1429, PF 0.83, 1/10 positive (2025).
+- Win rates ~ the 25% of a fair 1:3 bet; break-even needs ~29.2% after costs.
+- Gross edge ~0.03R/trade vs ~0.15R costs. Limit entry helped by ~0.025/trade only.
+- Accuracy: v1 tight; limit wide (-2336..-414), loses in every scenario.
+- Conclusion: no measurable edge in OB retests at 5m; entry timing was not the cause.
