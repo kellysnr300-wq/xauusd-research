@@ -115,3 +115,62 @@ class IntrabarResolver:
                 return "target"
 
         return None
+
+    def scan_order(self, side, kind, start, end, level, stop, target, adj=0.0):
+        """Order of events for a resting order inside one candle.
+
+        The order is filled the first minute price trades to `level`
+        (downwards for a long limit / short stop, upwards otherwise). After
+        the fill, which of stop / target comes first?
+
+        Returns "stop", "target", "open" (filled, neither reached before the
+        candle ends) or None (unknown: missing data, or the fill and an
+        exit fall inside the same minute).
+        """
+
+        self.queries += 1
+        found = self.minutes(start, end)
+        if found is None or len(found[0]) == 0:
+            return None
+
+        _, opens, highs, lows = found
+        long = side == "long"
+        down = (long and kind == "limit") or (not long and kind == "stop")
+        filled = False
+
+        for o, h, l in zip(opens, highs, lows):
+            if long:
+                stop_hit, take_hit = l <= stop, h >= target
+                gap_stop, gap_take = o <= stop, o >= target
+            else:
+                stop_hit, take_hit = h + adj >= stop, l + adj <= target
+                gap_stop, gap_take = o + adj >= stop, o + adj <= target
+
+            if not filled:
+                touched = (l <= level) if down else (h >= level)
+                if not touched:
+                    continue
+                filled = True
+                if stop_hit or take_hit:
+                    return None  # fill and exit in the same minute: unordered
+                continue
+
+            if stop_hit and take_hit:
+                if gap_stop:
+                    self.answered += 1
+                    return "stop"
+                if gap_take:
+                    self.answered += 1
+                    return "target"
+                return None
+            if stop_hit:
+                self.answered += 1
+                return "stop"
+            if take_hit:
+                self.answered += 1
+                return "target"
+
+        if not filled:
+            return None
+        self.answered += 1
+        return "open"

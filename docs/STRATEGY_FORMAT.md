@@ -102,3 +102,8 @@ empty numbers. The usual causes, in order of likelihood:
 Entries can also exceed trades: the engine holds one position at a time and
 ignores new entries while a trade is open. The funnel's last line shows how
 many trades were actually taken.
+
+## Resting (limit / stop) orders
+
+Add `entry_price`, `valid_for` and `cancel_beyond` columns in event mode to
+fill at a price instead of at the next open. See `docs/ORDERS.md`.

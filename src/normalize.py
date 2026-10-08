@@ -13,6 +13,14 @@ Optional exit levels (float, NaN = not set), all resolved at the fill:
     target_distance  target distance from the fill price
     target_r         target as a multiple of the risk (reward:risk)
 
+Resting orders (event mode only; NaN entry_price = market order at the
+next open):
+    entry_price      limit / stop-entry price (buy below the close = limit,
+                     above = stop; sells mirrored). Alias: limit_price
+    valid_for        candles the order stays live after this one (default 1)
+    cancel_beyond    cancel if a candle CLOSES beyond this price (long:
+                     below it, short: above it)
+
 Accepted shorthands (converted here, using only data up to that candle):
     stop_pct / target_pct   percent of the signal candle's close
     stop_atr / target_atr   multiple of ATR(atr_period)
@@ -39,7 +47,10 @@ LEVEL_COLUMNS = (
     "target_r",
 )
 SHORTHAND_COLUMNS = ("stop_pct", "stop_atr", "target_pct", "target_atr")
-CANONICAL_COLUMNS = ("signal", "entry") + LEVEL_COLUMNS
+ENTRY_PRICE_ALIASES = ("entry_price", "limit_price", "order_price")
+VALID_FOR_ALIASES = ("valid_for", "expires_in", "expiry")
+ORDER_COLUMNS = ("entry_price", "valid_for", "cancel_beyond")
+CANONICAL_COLUMNS = ("signal", "entry") + LEVEL_COLUMNS + ORDER_COLUMNS
 
 WORD_MAP = {
     "long": 1, "buy": 1, "up": 1, "bull": 1, "bullish": 1,
@@ -248,6 +259,37 @@ def normalize_output(raw, data: pd.DataFrame, atr_period: int = 14) -> Normalize
     if target_r is not None:
         out["target_r"] = target_r
 
+    # ---- resting orders: entry_price / valid_for / cancel_beyond ----------
+    for alias in ENTRY_PRICE_ALIASES:
+        values = column(alias)
+        if values is not None:
+            candidate = _positive(values, alias)
+            out["entry_price"] = (
+                candidate if "entry_price" not in out
+                else out["entry_price"].fillna(candidate))
+
+    for alias in VALID_FOR_ALIASES:
+        values = column(alias)
+        if values is not None:
+            numbers = pd.to_numeric(values, errors="coerce").astype(float)
+            numbers = numbers.replace([np.inf, -np.inf], np.nan)
+            if (numbers.dropna() < 1).any():
+                raise StrategyOutputError(f"Column '{alias}' must be at least 1 candle.")
+            numbers = numbers.round()
+            out["valid_for"] = (
+                numbers if "valid_for" not in out
+                else out["valid_for"].fillna(numbers))
+
+    values = column("cancel_beyond")
+    if values is not None:
+        out["cancel_beyond"] = _positive(values, "cancel_beyond")
+
+    if any(k in out for k in ORDER_COLUMNS) and mode != "event":
+        raise StrategyOutputError(
+            "entry_price, valid_for and cancel_beyond need event mode: "
+            "return an 'entry' column (1 / -1 / 0) instead of 'signal'."
+        )
+
     # ATR warm-up: no usable risk yet, so ignore signals there.
     if warm.any():
         ignored = int(((direction != 0) & warm).sum())
@@ -300,7 +342,7 @@ def normalize_output(raw, data: pd.DataFrame, atr_period: int = 14) -> Normalize
 
     result = pd.DataFrame(index=data.index)
     result["entry" if mode == "event" else "signal"] = direction.astype(int)
-    for name in LEVEL_COLUMNS:
+    for name in LEVEL_COLUMNS + ORDER_COLUMNS:
         if name in out and out[name].notna().any():
             result[name] = out[name].astype(float)
 

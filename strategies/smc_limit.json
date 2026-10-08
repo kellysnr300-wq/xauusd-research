@@ -1,0 +1,29 @@
+{
+  "id": "smc_limit",
+  "name": "SMC Limit (resting orders at the zone)",
+  "type": "Breakout",
+  "description": "Like SMC v1 but with LIMIT entries resting at the order block / FVG edge, filled the moment price trades there, instead of entering at the next open after the retest. Killzone and 1h-trend filters, stop beyond the zone, exact 3R target. Needs the new order-aware engine.",
+  "params": {
+    "source": "ob",
+    "swing": 2,
+    "kinds": "both",
+    "lookback": 5,
+    "zone": "range",
+    "max_age": 200,
+    "min_gap": 0.5,
+    "entry_at": 0.0,
+    "htf": "1h",
+    "htf_swing": 1,
+    "killzones": "london,ny_am",
+    "require_sweep": false,
+    "sweep_levels": "asia,pd,swing",
+    "sweep_window": 24,
+    "buffer": 0.3,
+    "target_r": 3.0,
+    "min_risk": 1.0,
+    "max_risk": 25.0
+  },
+  "status": "saved",
+  "created": "2026-10-07T00:00:00",
+  "updated": "2026-10-07T00:00:00"
+}

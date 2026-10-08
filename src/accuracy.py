@@ -14,6 +14,9 @@ import copy
 import math
 
 
+PESSIMISTIC_FILL_MARGIN = 0.20  # price units beyond the ask/bid trigger
+
+
 def wilson_interval(wins: int, n: int, z: float = 1.96):
     """95% Wilson score interval for a win rate (fractions, or None)."""
     if n <= 0:
@@ -67,13 +70,17 @@ def accuracy_report(backtester, resolver=None) -> dict:
     resolved = sum(1 for m in meta if m["ambiguous"] and m["resolved"])
 
     scenarios = {}
-    for name, ambiguity, ask in (
-        ("pessimistic", "stop_first", True),
-        ("optimistic", "target_first", False),
+    half_spread = backtester.execution.spread / 2.0
+    for name, ambiguity, ask, margin in (
+        # resting orders must trade through by 20 cents to fill
+        ("pessimistic", "stop_first", True, PESSIMISTIC_FILL_MARGIN),
+        # resting orders fill as soon as the chart price touches them
+        ("optimistic", "target_first", False, -half_spread),
     ):
         clone = copy.copy(backtester)
         clone.ambiguity = ambiguity
         clone.ask_triggers = ask
+        clone.fill_margin = margin
         scenarios[name] = summarize(clone.simulate(reuse_signals=True))
     scenarios["central"] = central
 
@@ -101,8 +108,10 @@ def accuracy_report(backtester, resolver=None) -> dict:
         "unresolved": ambiguous - resolved,
         "scenario_notes": {
             "pessimistic": "unresolved exits go against you; short stops and "
-                           "targets trigger on the ask price (bid + spread)",
-            "optimistic": "unresolved exits go in your favour",
+                           "targets trigger on the ask price (bid + spread); "
+                           "resting orders must trade 20 cents through",
+            "optimistic": "unresolved exits go in your favour; resting orders "
+                          "fill as soon as the chart price touches them",
         },
     }
 

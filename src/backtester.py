@@ -49,6 +49,10 @@ class Backtester:
     - One position at a time: entry events are ignored while a trade is
       open. Trades end only at the stop, the target, or the end of data.
     - Stop/target fill rules are the same as in the default mode.
+    - With an "entry_price" column the order RESTS: it is filled the moment
+      price trades to it (see _try_fill) during the next `valid_for`
+      candles, at that price, instead of at the next open. Entry and exit
+      inside one candle are ordered with the 1-minute resolver when given.
     """
 
     def __init__(
@@ -63,6 +67,9 @@ class Backtester:
         resolver=None,
         ask_triggers: bool = False,
         bar_delta: pd.Timedelta | None = None,
+        fill_margin: float = 0.0,
+        cancel_on_fill: bool = True,
+        max_orders: int = 50,
     ):
         if ambiguity not in ("stop_first", "target_first"):
             raise ValueError("ambiguity must be 'stop_first' or 'target_first'")
@@ -76,6 +83,9 @@ class Backtester:
         self.ambiguity = ambiguity
         self.resolver = resolver
         self.ask_triggers = ask_triggers
+        self.fill_margin = fill_margin
+        self.cancel_on_fill = cancel_on_fill
+        self.max_orders = max_orders
         self.bar_delta = bar_delta or self._infer_bar_delta()
         self.trades: list[Trade] = []
         self.trade_meta: list[dict] = []
@@ -224,42 +234,247 @@ class Backtester:
         ).clip(-1, 1).round().astype(int)
         specs = self._spec_arrays(signals)
 
+        def column(name):
+            if name in signals.columns:
+                return signals[name].to_numpy(dtype=float)
+            return None
+
+        prices = column("entry_price")
+        lives = column("valid_for")
+        cancels = column("cancel_beyond")
+
         position: Position | None = None
-        pending = None
+        entry_meta = {"ambiguous": False, "resolved": False}
+        orders: list[dict] = []
 
         for j in range(n):
-            # 1. Fill the entry requested on the previous candle.
-            if pending is not None:
-                side, spec_row = pending
-                pending = None
+            filled = None  # None, "open" (market / gap fill) or "touch"
+            fill_order = None
+            gap_ok = j > 0 and (ts[j] - ts[j - 1]) <= self.max_entry_gap
 
-                if position is None:
-                    if ts[j] - ts[j - 1] <= self.max_entry_gap:
+            # 1. Orders from earlier candles: expire, then try to fill.
+            orders = [o for o in orders if j <= o["last"]]
+
+            if position is not None:
+                # market requests are dropped while a trade is open
+                orders = [o for o in orders if o["price"] is not None]
+            elif gap_ok:
+                for order in list(orders):
+                    if order["price"] is None:
+                        orders.remove(order)
                         position = self._open_position(
-                            side, ts[j], opens[j], spec_row, specs,
-                            require_stop=True,
-                        )
+                            order["side"], ts[j], opens[j], order["row"],
+                            specs, require_stop=True)
                         if position is None:
                             self.skipped_entries += 1
+                            continue
+                        filled, fill_order = "open", order
+                    else:
+                        hit = self._try_fill(order, opens[j], highs[j], lows[j])
+                        if hit is None:
+                            continue
+                        orders.remove(order)
+                        mid, entry_price, gap, level = hit
+                        position = self._open_position_at(
+                            order["side"], ts[j], mid, entry_price,
+                            order["row"], specs)
+                        if position is None:
+                            self.skipped_entries += 1
+                            continue
+                        order["level"] = level
+                        filled = "open" if gap else "touch"
+                        fill_order = order
+                    break
 
-            # 2. Stop / target inside this candle (entry candle included).
+                if filled is not None:
+                    entry_meta = {"ambiguous": False, "resolved": False}
+                    if self.cancel_on_fill:
+                        orders = []
+
+            # 2. Stop / target inside this candle.
             if position is not None:
-                hit = self._check_exits(
-                    position, opens[j], highs[j], lows[j], ts[j]
-                )
+                if filled == "touch":
+                    hit = self._exits_after_touch(
+                        position, fill_order, opens[j], highs[j], lows[j],
+                        ts[j], entry_meta)
+                else:
+                    hit = self._check_exits(
+                        position, opens[j], highs[j], lows[j], ts[j])
+
                 if hit is not None:
                     fill, reason, meta = hit
-                    self._close(position, ts[j], fill, reason, meta)
+                    self._close(position, ts[j], fill, reason,
+                                self._merge_meta(entry_meta, meta))
                     position = None
 
-            # 3. New entry request, filled at the next open.
+            # 3. Cancel resting orders whose zone was closed through.
+            if orders:
+                orders = [
+                    o for o in orders
+                    if o["cancel"] is None
+                    or (o["side"] == 1 and closes[j] >= o["cancel"])
+                    or (o["side"] == -1 and closes[j] <= o["cancel"])
+                ]
+
+            # 4. New order from this candle's close.
             if j < n - 1 and entry[j] != 0:
-                pending = (entry[j], j)
+                side = int(entry[j])
+                price = None
+                if prices is not None and prices[j] == prices[j]:
+                    price = float(prices[j])
+
+                if price is None:
+                    order = {"side": side, "price": None, "kind": "market",
+                             "row": j, "last": j + 1, "cancel": None}
+                else:
+                    if side == 1:
+                        kind = "limit" if price <= closes[j] else "stop"
+                    else:
+                        kind = "limit" if price >= closes[j] else "stop"
+                    life = 1
+                    if lives is not None and lives[j] == lives[j]:
+                        life = max(int(lives[j]), 1)
+                    cancel = None
+                    if cancels is not None and cancels[j] == cancels[j]:
+                        cancel = float(cancels[j])
+                    order = {"side": side, "price": price, "kind": kind,
+                             "row": j, "last": j + life, "cancel": cancel}
+
+                orders = (orders + [order])[-self.max_orders:]
 
         if position is not None:
-            self._close(position, ts[-1], closes[-1], "end_of_data")
+            self._close(position, ts[-1], closes[-1], "end_of_data",
+                        self._merge_meta(entry_meta, None))
 
         return self.trades
+
+    # ------------------------------------------------------------------
+    # Resting orders
+    # ------------------------------------------------------------------
+
+    def _try_fill(self, order, o, h, l):
+        """Does this candle fill the order? -> (mid, entry_price, gap, level).
+
+        Chart prices are treated as mid; a buy pays the ask (mid + half the
+        spread), a sell receives the bid. A buy limit at P fills when the ask
+        reaches P, i.e. mid <= P - half. fill_margin makes fills harder
+        (price must trade through by that much); a negative value makes them
+        easier. A candle that opens beyond the trigger fills at the open.
+        """
+
+        half = self.execution.spread / 2.0
+        slip = self.execution.slippage
+        margin = self.fill_margin
+        side, kind, price = order["side"], order["kind"], order["price"]
+
+        if side == 1 and kind == "limit":
+            level = price - half - margin
+            triggered, gap = l <= level, o <= level
+            mid = o if gap else price - half
+            entry = mid + half + (slip if gap else 0.0)
+        elif side == 1:
+            level = price - half + margin
+            triggered, gap = h >= level, o >= level
+            mid = o if gap else price - half
+            entry = mid + half + slip
+        elif kind == "limit":
+            level = price + half + margin
+            triggered, gap = h >= level, o >= level
+            mid = o if gap else price + half
+            entry = mid - half - (slip if gap else 0.0)
+        else:
+            level = price + half - margin
+            triggered, gap = l <= level, o <= level
+            mid = o if gap else price + half
+            entry = mid - half - slip
+
+        if not triggered:
+            return None
+        return mid, entry, gap, level
+
+    def _open_position_at(self, side, time, mid, entry_price, row, specs):
+        levels = self._resolve_levels(side, mid, row, specs, True)
+        if levels is None:
+            return None
+        stop, target = levels
+        return Position(
+            side="long" if side == 1 else "short",
+            entry_time=time,
+            entry_price=entry_price,
+            quantity=self.quantity,
+            stop_loss=stop,
+            take_profit=target,
+        )
+
+    def _exits_after_touch(self, position, order, o, h, l, start, entry_meta):
+        """Stop / target in the candle where a resting order was filled.
+
+        The fill happened at an unknown moment inside the candle, so a level
+        reached by the candle's extremes may have been reached BEFORE the
+        fill. 1-minute data settles the order of events. Without it:
+        * a limit entry (price came toward the position) reaches its stop
+          only after the fill (certain) but its target maybe before it;
+        * a stop entry reaches its target only after the fill (certain) but
+          its stop maybe before it.
+        Uncertain legs count against you under "stop_first" and for you
+        under "target_first".
+        """
+
+        stop, take = position.stop_loss, position.take_profit
+        long = position.side == "long"
+        adj = self.execution.spread if (self.ask_triggers and not long) else 0.0
+
+        if long:
+            stop_hit, take_hit = l <= stop, h >= take
+        else:
+            stop_hit, take_hit = h + adj >= stop, l + adj <= take
+
+        if not stop_hit and not take_hit:
+            return None
+
+        def result(choice, meta):
+            if choice == "stop":
+                return stop, "stop_loss", meta
+            return take, "take_profit", meta
+
+        if self.resolver is not None and start is not None:
+            outcome = self.resolver.scan_order(
+                position.side, order["kind"], start, start + self.bar_delta,
+                order["level"], stop, take, adj)
+            if outcome is not None:
+                entry_meta["ambiguous"], entry_meta["resolved"] = True, True
+                if outcome == "open":
+                    return None
+                return result(outcome, {"ambiguous": False, "resolved": False})
+
+        limit_type = order["kind"] == "limit"
+        certain_stop, certain_take = limit_type, not limit_type
+        stop_first = self.ambiguity == "stop_first"
+
+        counts_stop = stop_hit and (certain_stop or stop_first)
+        counts_take = take_hit and (certain_take or not stop_first)
+
+        uncertain = (stop_hit and not certain_stop) or (take_hit and not certain_take)
+        if uncertain or (stop_hit and take_hit):
+            entry_meta["ambiguous"], entry_meta["resolved"] = True, False
+
+        if counts_stop and counts_take:
+            return result("stop" if stop_first else "target",
+                          {"ambiguous": False, "resolved": False})
+        if counts_stop:
+            return result("stop", {"ambiguous": False, "resolved": False})
+        if counts_take:
+            return result("target", {"ambiguous": False, "resolved": False})
+        return None
+
+    @staticmethod
+    def _merge_meta(entry_meta, meta):
+        meta = meta or {"ambiguous": False, "resolved": False}
+        ambiguous = entry_meta["ambiguous"] or meta["ambiguous"]
+        resolved = ambiguous and (
+            (not entry_meta["ambiguous"] or entry_meta["resolved"])
+            and (not meta["ambiguous"] or meta["resolved"]))
+        return {"ambiguous": ambiguous, "resolved": resolved}
 
     # ------------------------------------------------------------------
     # Helpers
