@@ -26,3 +26,9 @@
 - Gross edge ~0.03R/trade vs ~0.15R costs. Limit entry helped by ~0.025/trade only.
 - Accuracy: v1 tight; limit wide (-2336..-414), loses in every scenario.
 - Conclusion: no measurable edge in OB retests at 5m; entry timing was not the cause.
+
+## 005 - Placebo test, smc_limit, 5m, 2016-2025, 50 runs
+- Random timing (same geometry, same NY clock time, +-90 days): -0.386/trade, win 24.2%.
+- Real: -0.311/trade, win 25.3%, 4796 trades. Edge over random +0.074/trade (z 1.59, p 0.059).
+- Verdict: indistinguishable from random timing.
+- Edge ~0.03R vs costs ~0.15R: even if real, 5x too small. No tradable edge.
