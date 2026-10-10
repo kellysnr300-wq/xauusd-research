@@ -32,3 +32,11 @@
 - Real: -0.311/trade, win 25.3%, 4796 trades. Edge over random +0.074/trade (z 1.59, p 0.059).
 - Verdict: indistinguishable from random timing.
 - Edge ~0.03R vs costs ~0.15R: even if real, 5x too small. No tradable edge.
+
+## 006 - Placebo screen of 9 saved strategies, 5m, 2016-2025, 20 runs
+- Random timing loses ~0.40/trade for every strategy (= spread + slippage).
+- Best edge over random: grok_atr_mean_reversion +0.083/trade (p 0.14); test_2 +0.024 (p 0.048, the
+  minimum possible at 20 runs; ~30% chance of one such flag among 7 tests).
+- claude, momentum_breakout, test_1: worse than random timing.
+- smc_original: 2 trades only; new: timed out (>30 min).
+- Conclusion: no 5m strategy beats the ~0.40/trade cost; best edge is ~1/5 of it.
