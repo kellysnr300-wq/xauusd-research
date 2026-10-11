@@ -90,8 +90,15 @@ class Backtester:
         self.trades: list[Trade] = []
         self.trade_meta: list[dict] = []
         self.skipped_entries = 0
+        self.order_stats = self._new_stats()
         self.warnings: list[str] = []
         self._signals = None
+
+    @staticmethod
+    def _new_stats() -> dict:
+        return {"posted": 0, "filled": 0, "expired_unfilled": 0,
+                "cancelled": 0, "dropped_busy": 0, "gap_blocked": 0,
+                "invalid": 0, "overflow": 0}
 
     def _infer_bar_delta(self) -> pd.Timedelta:
         stamps = pd.DatetimeIndex(self.data["timestamp"])[:200]
@@ -139,6 +146,7 @@ class Backtester:
         self.trades = []
         self.trade_meta = []
         self.skipped_entries = 0
+        self.order_stats = self._new_stats()
         self.portfolio = Portfolio(self.initial_capital)
 
         if "entry" in signals.columns:
@@ -189,8 +197,12 @@ class Backtester:
                                 target, ts[j], opens[j], spec_row, specs,
                                 require_stop=False,
                             )
+                            self.order_stats["posted"] += 1
                             if position is None:
                                 self.skipped_entries += 1
+                                self.order_stats["invalid"] += 1
+                            else:
+                                self.order_stats["filled"] += 1
 
             # 2. Check stop / target inside this candle.
             if position is not None:
@@ -253,11 +265,19 @@ class Backtester:
             gap_ok = j > 0 and (ts[j] - ts[j - 1]) <= self.max_entry_gap
 
             # 1. Orders from earlier candles: expire, then try to fill.
-            orders = [o for o in orders if j <= o["last"]]
+            alive = [o for o in orders if j <= o["last"]]
+            self.order_stats["expired_unfilled"] += len(orders) - len(alive)
+            orders = alive
 
             if position is not None:
                 # market requests are dropped while a trade is open
-                orders = [o for o in orders if o["price"] is not None]
+                kept = [o for o in orders if o["price"] is not None]
+                self.order_stats["dropped_busy"] += len(orders) - len(kept)
+                orders = kept
+            elif not gap_ok:
+                kept = [o for o in orders if o["price"] is not None]
+                self.order_stats["gap_blocked"] += len(orders) - len(kept)
+                orders = kept
             elif gap_ok:
                 for order in list(orders):
                     if order["price"] is None:
@@ -267,7 +287,9 @@ class Backtester:
                             specs, require_stop=True)
                         if position is None:
                             self.skipped_entries += 1
+                            self.order_stats["invalid"] += 1
                             continue
+                        self.order_stats["filled"] += 1
                         filled, fill_order = "open", order
                     else:
                         hit = self._try_fill(order, opens[j], highs[j], lows[j])
@@ -280,7 +302,9 @@ class Backtester:
                             order["row"], specs)
                         if position is None:
                             self.skipped_entries += 1
+                            self.order_stats["invalid"] += 1
                             continue
+                        self.order_stats["filled"] += 1
                         order["level"] = level
                         filled = "open" if gap else "touch"
                         fill_order = order
@@ -289,6 +313,7 @@ class Backtester:
                 if filled is not None:
                     entry_meta = {"ambiguous": False, "resolved": False}
                     if self.cancel_on_fill:
+                        self.order_stats["cancelled"] += len(orders)
                         orders = []
 
             # 2. Stop / target inside this candle.
@@ -309,12 +334,14 @@ class Backtester:
 
             # 3. Cancel resting orders whose zone was closed through.
             if orders:
-                orders = [
+                survivors = [
                     o for o in orders
                     if o["cancel"] is None
                     or (o["side"] == 1 and closes[j] >= o["cancel"])
                     or (o["side"] == -1 and closes[j] <= o["cancel"])
                 ]
+                self.order_stats["cancelled"] += len(orders) - len(survivors)
+                orders = survivors
 
             # 4. New order from this candle's close.
             if j < n - 1 and entry[j] != 0:
@@ -340,6 +367,9 @@ class Backtester:
                     order = {"side": side, "price": price, "kind": kind,
                              "row": j, "last": j + life, "cancel": cancel}
 
+                self.order_stats["posted"] += 1
+                if len(orders) >= self.max_orders:
+                    self.order_stats["overflow"] += 1
                 orders = (orders + [order])[-self.max_orders:]
 
         if position is not None:
