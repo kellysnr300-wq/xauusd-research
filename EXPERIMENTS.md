@@ -40,3 +40,12 @@
 - claude, momentum_breakout, test_1: worse than random timing.
 - smc_original: 2 trades only; new: timed out (>30 min).
 - Conclusion: no 5m strategy beats the ~0.40/trade cost; best edge is ~1/5 of it.
+
+## 008 - Placebo test, smc_sequence, 5m, 2016-2025, 50 runs
+mode: event | runs: 50/50 | orders moved: 100% (up to +-90 days, same NY clock time)
+real          816 trades  total    -352.5  avg  -0.432/trade  win 24.0%
+placebo       713 trades  total    -253.5  avg  -0.355/trade  win 25.0%
+placebo avg/trade 5%-95% range: -0.898 to +0.481
+real minus placebo: -0.077 per trade  (z = -0.19)
+p (random timing >= real): 0.608   p (random timing <= real): 0.412
+verdict: INDISTINGUISHABLE from random timing
